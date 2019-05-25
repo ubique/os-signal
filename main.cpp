@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h> 
+#include <limits>
 
 void out_sym(uint8_t k) {
     char c;
@@ -120,5 +121,8 @@ int main() {
     //     a[j] = j;
     //     std::cout << a[j] << "\n";
     // }
+    //test 3
+    //char *nll = reinterpret_cast<char*>(std::numeric_limits<long long>::max());
+    //*nll = 5;
     return 0;
 }
