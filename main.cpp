@@ -1,5 +1,7 @@
 #include <iostream>
 #include "Handler.h"
+#include <string.h>
+
 
 void fall() {
     int* p = nullptr;

@@ -5,6 +5,8 @@
 #include "Handler.h"
 #include <iostream>
 #include <cmath>
+#include <climits>
+
 
 
 void Handler::handleSignal(int signum, siginfo_t* info, void* context) {
