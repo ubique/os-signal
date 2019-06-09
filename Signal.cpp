@@ -5,7 +5,7 @@
 #include <csignal>
 #include <csetjmp>
 
-const int MEMORY_DUMP_RANGE = 20 * sizeof(char);
+const int MEMORY_DUMP_RANGE = 20;
 const char* regStr[] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
 "RDI", "RSI", "RBP", "RBX", "RDX", "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS",
 "ERR", "TRAPNO", "OLDMASK", "CR2"};
@@ -35,7 +35,7 @@ void dumpMem(void* address)
     std::cout << "Memory dump \n";
     const long long from = std::max(0LL, (long long) ((char*) address - MEMORY_DUMP_RANGE));
     const long long to = std::min(LONG_LONG_MAX, (long long) ((char*) address + MEMORY_DUMP_RANGE));
-    for (long long i = from; i < to; i += sizeof(char))
+    for (long long i = from; i < to; ++i)
     {
         sigset_t setSignal;
         sigemptyset(&setSignal);
@@ -72,9 +72,18 @@ void sigsegvHandler(int num, siginfo_t* siginfo, void* context)
         } else {
             std::cout << "Error code: " << siginfo -> si_code << '\n';
         }
-        std::cout << "Address: " << siginfo -> si_addr << '\n';
+        std::cout << "Address: ";
+        if(siginfo -> si_addr == nullptr)
+        {
+            std::cout << "nullptr\n";
+        } else {
+            std::cout <<  siginfo -> si_addr << '\n';
+        }
         dumpReg((ucontext_t*) context);
-        dumpMem(siginfo -> si_addr);
+        if (siginfo -> si_addr != nullptr)
+        {
+            dumpMem(siginfo -> si_addr);
+        }
     }
     exit(0);
 }
