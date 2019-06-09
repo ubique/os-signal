@@ -9,7 +9,7 @@ void printError(const char *error) {
 }
 
 void generateError() {
-	char str[14] = "Hello, World!";
+	char *str = const_cast<char *>("Hello, World!");
 	str[15] = ' ';
 }
 

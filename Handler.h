@@ -12,7 +12,7 @@ using namespace std;
 
 class Handler {
 	public:
-		static void handler(int, siginfo_t*, void*);
+		static void handler(int, siginfo_t *, void *);
 		static void dump_registers(ucontext_t *);
 		static void dump_memory(void *);
 		static void print_error(const char *);

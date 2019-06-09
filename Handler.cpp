@@ -20,13 +20,13 @@ void Handler::dump_memory(void *address) {
 		print_error("address in nullptr");
 	}
 
-	size_t addr = reinterpret_cast<size_t>(address);
+	size_t addr = reinterpret_cast<size_t> (address);
 	size_t left;
 	size_t right;
 
 	find_borders(left, right, addr);
 
-	for (int i = left; i < right; i++) {
+	for (size_t i = left; i < right; i++) {
 		sigset_t sigset_;
 		sigemptyset(&sigset_);
 		sigaddset(&sigset_, SIGSEGV);
@@ -44,9 +44,10 @@ void Handler::dump_memory(void *address) {
 			cerr << "Memory dump failed" << endl;
 		}
 		else {
-			cout << "0x" << hex << *reinterpret_cast<char *>(i) << endl;
+			cout << "0x" << hex << (int) *reinterpret_cast<char *>(i) << endl;
 		}
 	}
+	cout << endl;
 }
 
 void Handler::jump_handler(int signo, siginfo_t *siginfo, void *ucontext) {
@@ -72,24 +73,24 @@ void Handler::find_borders(size_t &left, size_t &right, size_t addr) {
 void Handler::dump_registers(ucontext_t *ucontext) {
 	cout << "Registers dump:" << endl;
 	for (map <string, int>::iterator it = regs.begin(); it != regs.end(); it++) {
-		cout << (*it).first << ": " << ucontext->uc_mcontext.gregs[(*it).second] << endl;
+		cout << (*it).first << ": " << "0x" << hex << ucontext->uc_mcontext.gregs[(*it).second] << endl;
 	}
 }
 
 void Handler::handler(int signo, siginfo_t *siginfo, void *ucontext) {
-	cout << "SIGSEGV occurred" << endl;
+	cout << "SIGSEGV occurred" << endl << endl;
+
 	if (siginfo->si_signo == SIGSEGV) {
-		const char * addr;
+		const char *addr;
 		if (siginfo->si_addr == nullptr) {
 			addr = "null";
 		}
 		else {
-			addr = (char *) siginfo->si_addr;
+			addr = reinterpret_cast<const char *> (siginfo->si_addr);
 		}
 
+		cout << "Address: " << siginfo->si_addr << endl << endl;
 
-		cout << "Address: " << addr << endl;
-		
 		dump_memory(siginfo->si_addr);
 		dump_registers(reinterpret_cast<ucontext_t *> (ucontext));
 	}
