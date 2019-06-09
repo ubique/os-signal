@@ -1,0 +1,32 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/miketerentyev/itmo/2-year/os-course/os-signal/main.cpp
+csignal
+-
+cstdlib
+-
+cstring
+-
+cstdio
+-
+iostream
+-
+ucontext.h
+-
+cmath
+-
+algorithm
+-
+climits
+-
+sys/ucontext.h
+-
+csetjmp
+-
+
