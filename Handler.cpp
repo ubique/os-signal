@@ -78,19 +78,8 @@ void Handler::dump_registers(ucontext_t *ucontext) {
 }
 
 void Handler::handler(int signo, siginfo_t *siginfo, void *ucontext) {
-	cout << "SIGSEGV occurred" << endl << endl;
-
 	if (siginfo->si_signo == SIGSEGV) {
-		const char *addr;
-		if (siginfo->si_addr == nullptr) {
-			addr = "null";
-		}
-		else {
-			addr = reinterpret_cast<const char *> (siginfo->si_addr);
-		}
-
-		cout << "Address: " << siginfo->si_addr << endl << endl;
-
+		cout << "SIGSEGV occurred at address: " << ((siginfo->si_addr == nullptr)? "null" : siginfo->si_addr) << endl << endl;
 		dump_memory(siginfo->si_addr);
 		dump_registers(reinterpret_cast<ucontext_t *> (ucontext));
 	}
