@@ -89,8 +89,6 @@ void print_register(int r, ucontext_t *context) {
 
 static jmp_buf jbuf;
 
-void print_register(int r);
-
 void handler(int signum, siginfo_t *siginfo, void *context) {
     if (siginfo->si_signo == SIGSEGV) {
         siglongjmp(jbuf, 1);
