@@ -11,6 +11,8 @@ using std::endl;
 using std::cerr;
 using std::string;
 
+const int LONGEST_REG_NAME_LEN = 7;
+
 void check(int var_to_check, const char *msg) {
     if (var_to_check == -1) {
         std::perror(msg);
@@ -36,6 +38,9 @@ template<typename T>
 void write_reg(const string &reg_name, T reg) {
     write_str(reg_name.data());
     write_str(": ");
+    for (int i = 0; i < LONGEST_REG_NAME_LEN - reg_name.size(); i++) {
+        write_str(" ");
+    }
 
     char *formatted_str = new char[19];
     uint64_t x = (*gregset)[reg];
@@ -55,7 +60,24 @@ void write_c(uint8_t x) {
     write(1, &c, 1);
 }
 
-void my_action(int sig, siginfo_t *siginfo, void *context) {
+void write_val(int i, int* pipe_instance, siginfo_t *siginfo) {
+    char value;
+    write_str(i == 0 ? ">" : " ");
+
+    int write_status = write(pipe_instance[1], (char *) (siginfo->si_addr) + i, 1);
+    if (write_status == -1 || read(pipe_instance[0], &value, 1) == -1) {
+        write_str("??");
+    } else {
+        write_c(value / 16);
+        write_c(value % 16);
+    }
+    write_str(i == 0 ? "<" : " ");
+    if ((i + 1) % ROW_LEN == 0) {
+        write_str("\n");
+    }
+}
+
+void my_action(int, siginfo_t *siginfo, void *context) {
     auto *ctx = (ucontext_t *) context;
     gregset = &ctx->uc_mcontext.gregs;
 
@@ -84,32 +106,14 @@ void my_action(int sig, siginfo_t *siginfo, void *context) {
     write_reg("CR2", REG_CR2);
 
     int pepe[2];
-    uint8_t value;
     int status = pipe(pepe);
 
     if (status == -1) {
         write_str("Can't dump\n");
-        exit(0);
+        exit(EXIT_FAILURE);
     }
     for (int i = LOWER_BOUND; i < HIGHER_BOUND; i++) {
-        write_str(i == 0 ? ">" : " ");
-
-        status = write(pepe[1], (char *) (siginfo->si_addr) + i, 1);
-        if (status == -1) {
-            write_str("??");
-        } else {
-            status = read(pepe[0], &value, 1);
-            if (status != -1) {
-                write_c(value / 16);
-                write_c(value % 16);
-            } else {
-                write_str("??");
-            }
-        }
-        write_str(i == 0 ? "<" : " ");
-        if ((i + 1) % ROW_LEN == 0) {
-            write_str("\n");
-        }
+        write_val(i, pepe, siginfo);
     }
     exit(EXIT_FAILURE);
 }
@@ -122,7 +126,7 @@ int main(int argc, char *argv[]) {
     check(status, "Error in creation of empty set of signals\n");
     sa.sa_sigaction = my_action;
 
-    status = sigaction(SIGSEGV, &sa, NULL);
+    status = sigaction(SIGSEGV, &sa, nullptr);
     check(status, "Error in generating sigact call\n");
     return 0;
 }
