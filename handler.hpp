@@ -18,7 +18,9 @@ public:
 
     void cause_segfault();
 
-    void dump_registers(ucontext_t *ucontext);
+    static void dump_registers(ucontext_t *ucontext);
+
+    static void dump_memory(void *address);
 
     struct handler_exception : public std::runtime_error {
 
@@ -31,6 +33,8 @@ public:
 private:
 
     static void handle(int signal, siginfo_t *siginfo, void *context);
+
+    static void handle_inner(int, siginfo_t *, void *);
 
     static jmp_buf jmp;
 

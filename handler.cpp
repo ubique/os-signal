@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+#include <limits>
 
 namespace console {
 
@@ -37,6 +38,8 @@ namespace console {
 
 }
 
+jmp_buf handler::jmp;
+
 handler::handler() {
     struct sigaction action{};
 
@@ -49,12 +52,19 @@ handler::handler() {
 }
 
 void handler::cause_segfault() {
-    char mem[0];
-    mem[0] /= 0;
+    const char *test = "Hello, world, de-gozaru!";
+    const_cast<char *>(test)[0] = 'X';
+
+    *(int *) 0 = 0;
+
+    raise(SIGSEGV);
+
+    void *data = malloc(1);
+    reinterpret_cast<char *>(data)[2] += 4;
 }
 
 void handler::dump_registers(ucontext_t *ucontext) {
-    static std::unordered_map<std::string, int> registers{
+    static std::vector<std::pair<std::string, int>> registers{
             {"R8",      REG_R8},
             {"R9",      REG_R8},
             {"R10",     REG_R8},
@@ -82,21 +92,59 @@ void handler::dump_registers(ucontext_t *ucontext) {
 
     console::notify("REGISTERS");
     for (auto const &pair : registers) {
-        std::ios state(nullptr);
-        state.copyfmt(std::cout);
-
-        std::cout << std::setw(8) << std::setfill(' ') << pair.first;
-        std::cout.copyfmt(state);
-
-        std::cout << ": " << std::hex << ucontext->uc_mcontext.gregs[pair.second] << std::endl;
-        std::cout.copyfmt(state);
+        std::cout << std::setw(8) << std::setfill(' ') << std::left << pair.first;
+        std::cout << ": " << std::setw(16) << std::setfill('0') << std::hex <<
+                  ucontext->uc_mcontext.gregs[pair.second] << std::endl;
     }
+    std::cout << std::endl;
+}
+
+void handler::dump_memory(void *address) {
+    char *mem = reinterpret_cast<char *>(address);
+
+    struct sigaction action{};
+
+    action.sa_flags = SA_NODEFER | SA_SIGINFO;
+    action.sa_sigaction = &handle_inner;
+
+    if (sigaction(SIGSEGV, &action, nullptr) < 0) {
+        throw handler_exception("Could not set signal handler to inner handler", errno);
+    }
+
+    char *from = mem > reinterpret_cast<char *>(32) ? mem - 32 : nullptr;
+    char *to = mem < std::numeric_limits<char *>::max() - 32 ? mem + 32 : std::numeric_limits<char *>::max();
+    console::notify("MEMORY");
+
+    std::cout << console::_ERROR << "FROM " << std::setw(16) << std::setfill('0') << reinterpret_cast<size_t>(from)
+              << " TO " << std::setw(16) << std::setfill('0') << reinterpret_cast<size_t>(to)
+              << console::_DEFAULT << std::endl;
+
+    for (char *cell = from; cell <= to; cell++) {
+        if (cell == mem) {
+            std::cout << "[-> ";
+        }
+        if (setjmp(jmp) < 0) {
+            std::cout << "-- ";
+        } else {
+            std::cout << std::setw(2) << std::setfill('0') << (*cell & 0xFFu) << ' ';
+        }
+        if (cell == mem) {
+            std::cout << "<-] ";
+        }
+    }
+    std::cout << std::endl;
 }
 
 void handler::handle(int signal, siginfo_t *siginfo, void *context) {
     if (siginfo->si_signo == SIGSEGV) {
-
+        dump_registers(reinterpret_cast<ucontext_t *>(context));
+        dump_memory(siginfo->si_addr);
+        exit(-1);
     }
+}
+
+void handler::handle_inner(int, siginfo_t *, void *) {
+    longjmp(jmp, -1);
 }
 
 int main() {

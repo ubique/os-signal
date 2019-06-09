@@ -12,5 +12,5 @@ CMakeCache.txt
 Makefile
 CMakeFiles/
 
-client
-server
+segfault
+handler
