@@ -45,7 +45,7 @@ void Handler::dumpRegisters(ucontext_t* context) {
 void Handler::dumpMemory(void* address) {
     if (address == nullptr) {
         std::cout << "Address is nullptr" << std::endl;
-        exit(EXIT_FAILURE);
+        return;
     }
     long long from = std::max(0ll, (long long) (static_cast<char*>(address) - sizeof(char) * MEMORY_SIZE));
     long long to = std::min(LONG_LONG_MAX, (long long) (static_cast<char*>(address) + sizeof(char) * MEMORY_SIZE));
