@@ -11,6 +11,8 @@
 
 static const long long RANGE = 50;
 
+static const size_t CHAR_SIZE = sizeof(char);
+
 static jmp_buf jmpBuf;
 
 
@@ -100,11 +102,10 @@ void dumpByAddress(long long addr) {
 void dumpMemory(char *addr) {
     std::cout << "Memory: " << std::endl;
 
-    const size_t charSize = sizeof(char);
-    const long long left = std::max(0LL, reinterpret_cast<long long> (addr - RANGE * sizeof(char)));
-    const long long right = std::min(LONG_LONG_MAX, reinterpret_cast<long long> (addr + RANGE * sizeof(char)));
+    const long long left = std::max(0LL, reinterpret_cast<long long> (addr - RANGE * CHAR_SIZE));
+    const long long right = std::min(LONG_LONG_MAX, reinterpret_cast<long long> (addr + RANGE * CHAR_SIZE));
 
-    for (auto address = left; address < right; address += charSize) {
+    for (auto address = left; address < right; address += CHAR_SIZE) {
         dumpByAddress(address);
     }
     std::cout << "____________________________________\n" << std::endl;
