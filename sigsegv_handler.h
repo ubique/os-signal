@@ -11,7 +11,7 @@ void handle(int sig, siginfo_t* siginfo, void* context);
 
 class sigsegv_handler {
 public:
-    sigsegv_handler(/*void (*handle_func) (int, siginfo_t*, void*)*/);
+    explicit sigsegv_handler(void (*handle_func) (int, siginfo_t*, void*));
 };
 
 #endif //OS_SIGNAL_SIGSEGV_HANDLER_H

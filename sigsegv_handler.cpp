@@ -16,10 +16,10 @@
 
 static jmp_buf jmpbuf;
 
-constexpr const size_t offset = 16; /* bytes */
-constexpr char* MAX_MEM = std::numeric_limits<char*>::max();
+static constexpr const size_t offset = 16; /* bytes */
+static constexpr size_t MAX_MEM = std::numeric_limits<size_t>::max();
 
-const std::map<std::string, int> registers = {
+static const std::map<std::string, int> registers = {
         {"CR2",     REG_CR2},
         {"ERR",     REG_ERR},
         {"CSGSFS",  REG_CSGSFS},
@@ -45,10 +45,8 @@ const std::map<std::string, int> registers = {
         {"TRAPNO",  REG_TRAPNO},
 };
 
-namespace {
-    void handle1(int sig) {
-        longjmp(jmpbuf, 1);
-    }
+static void handle1(int sig, siginfo_t *siginfo, void *context) {
+    longjmp(jmpbuf, 1);
 }
 
 void handle(int sig, siginfo_t* siginfo, void* context) {
@@ -56,45 +54,41 @@ void handle(int sig, siginfo_t* siginfo, void* context) {
         return;
     }
     std::cout << strsignal(sig) << "on address: " << siginfo->si_addr << std::endl;
-    std::cout << "GENERAL REGISTERS:" << std::endl;
+    std::cout << "general registers:" << std::endl;
     auto ucontext = reinterpret_cast<ucontext_t *>(context);
     for (auto& reg : registers) {
         std::cout << reg.first << ": " << ucontext->uc_mcontext.gregs[reg.second] << std::endl;
     }
 
-    char* address = static_cast<char*>(siginfo->si_addr);
-    char* left_bound = address > (char*)offset ? address - offset : nullptr;
-    char* right_bound = address < MAX_MEM - offset ? address + offset : MAX_MEM;
+    size_t address = reinterpret_cast<size_t>(siginfo->si_addr);
+    size_t left_bound = address > offset ? address - offset : 0;
+    size_t right_bound = address < MAX_MEM - offset ? address + offset : MAX_MEM;
 
-    std::cout << "MEMORY DUMP:" << std::endl;
-    for (char* ptr = left_bound; ptr < right_bound; ++ptr) {
-        struct sigaction sig_act{};
-        sig_act.sa_flags = SA_NOMASK;
-        sig_act.sa_handler = &handle1;
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGSEGV);
 
-        if (sigaction(SIGSEGV, &sig_act, NULL) < 0) {
-            perror("Unable to change signal action");
-            exit(EXIT_FAILURE);
-        }
+    std::cout << "memory dump from " << left_bound << " to " << right_bound << ": " << std::endl;
+    for (size_t i = left_bound; i < right_bound; ++i) {
+        sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
+        sigsegv_handler handler(handle1);
+
+        char *ptr = reinterpret_cast<char*>(i);
         if (setjmp(jmpbuf)) {
-            std::cerr << "Unable to read nearby memory" << std::endl;
+            std::cout << "?? ";
+        } else if (i == address) {
+            std::cout << "[HERE] ";
         } else {
-            if (ptr == address) {
-                std::cout << "[";
-            }
-            std::cout << (int)*ptr;
-            if (ptr == address) {
-                std::cout << "]";
-            }
-            std::cout << std::endl;
+            std::cout << std::hex << std::uppercase << int(*ptr) << " ";
         }
     }
+    std::cout << std::endl;
     exit(EXIT_FAILURE);
 }
 
-sigsegv_handler::sigsegv_handler() {
+sigsegv_handler::sigsegv_handler(void (*handle_func) (int, siginfo_t*, void*)) {
     struct sigaction sig_act{};
-    sig_act.sa_sigaction = &handle;
+    sig_act.sa_sigaction = handle_func;
     sig_act.sa_flags = (SA_SIGINFO | SA_NOMASK);
 
     sigset_t sig;

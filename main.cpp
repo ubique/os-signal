@@ -2,14 +2,12 @@
 // Created by vitalya on 09.06.19.
 //
 
+#include <cstdio>
 #include "sigsegv_handler.h"
 
 int main() {
-    sigsegv_handler handler1();
-    int var[1];
-    char a[1];
+    sigsegv_handler handler(&handle);
 
-    for (auto ptr = a; ; ++ptr) {
-        *ptr += 42;
-    }
+    char* null = 0;
+    *null = 10;
 }
