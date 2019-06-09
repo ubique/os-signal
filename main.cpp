@@ -88,8 +88,7 @@ void dumpMemory(void *address) {
             std::cerr << "error during dump\n";
 //            return;
         } else {
-            auto p = +*reinterpret_cast<char *>(i);
-            if (p) cout << "0x" << std::hex << p << "\n";
+            cout << "0x" << std::hex << +*reinterpret_cast<char *>(i) << "\n";
         }
     }
 }
