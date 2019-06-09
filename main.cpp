@@ -69,7 +69,7 @@ void helpHandler(int, siginfo_t *siginfo, void *) {
 void dumpMemory(void *address) {
     auto left = std::max(0LL, (long long) ((char *) address - R));
     auto right = std::min(LONG_LONG_MAX, (long long) ((char *) address + R));
-    for (auto i = left; i <= right; ++i) {
+    for (long long i = left; i <= right; ++i) {
         sigset_t sigset;
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGSEGV);
@@ -84,11 +84,12 @@ void dumpMemory(void *address) {
             return;
         }
 
+        cout << "0x" << i << ' ';
         if (setjmp(jmpBuf) != 0) {
-            std::cerr << "error during dump\n";
+            std::cout << "error during dump\n";
 //            return;
         } else {
-            cout << "0x" << std::hex << +*reinterpret_cast<char *>(i) << "\n";
+             cout << std::hex << +*reinterpret_cast<char *>(i) << '\n';
         }
     }
 }
@@ -124,5 +125,10 @@ int main() {
 
     // any code causing errors
 
+    char a[1];
+
+    for (auto ptr = a; ; ++ptr) {
+        ++*ptr;
+    }
     return 0;
 }
