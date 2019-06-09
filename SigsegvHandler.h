@@ -10,9 +10,8 @@
 #include <bits/types/siginfo_t.h>
 
 class SigsegvHandler {
-    static jmp_buf jmp;
 
-    static void myHandle(int);
+    static void myHandle(int, siginfo_t *, void*);
 
     static void handle(int, siginfo_t *, void *);
 

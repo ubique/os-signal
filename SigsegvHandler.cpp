@@ -12,7 +12,7 @@
 #include <map>
 #include <string.h>
 
-jmp_buf SigsegvHandler::jmp;
+jmp_buf jmp;
 
 const std::map<std::string, int> registers = {{"R8",      REG_R8},
                                               {"R9",      REG_R9},
@@ -40,8 +40,10 @@ const std::map<std::string, int> registers = {{"R8",      REG_R8},
 
 const int NUM = 8;
 
-void SigsegvHandler::myHandle(int sig) {
-    longjmp(jmp, 1);
+void SigsegvHandler::myHandle(int sig, siginfo_t *siginfo, void *ucontext) {
+    if (siginfo->si_signo == SIGSEGV) {
+        siglongjmp(jmp, 1);
+    }
 }
 
 void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
@@ -61,16 +63,24 @@ void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
         else left = NULL;
         if (addr < maxc - NUM) right = addr + NUM;
         else right = maxc;
+        sigset_t sset;
+        sigemptyset(&sset);
+        sigaddset(&sset, SIGSEGV);
         for (char *i = left; i <= right; i++) {
-            struct sigaction act;
-            act.sa_flags = SA_NOMASK;
-            act.sa_handler = &myHandle;
+            sigprocmask(SIG_UNBLOCK, &sset, nullptr);
+            struct sigaction act{};
+            act.sa_flags = SA_SIGINFO;
+            act.sa_sigaction = &myHandle;
+            sigset_t sigset1{};
+            sigemptyset(&sigset1);
+            sigaddset(&sigset1, SIGSEGV);
+            act.sa_mask = sigset1;
             if (sigaction(SIGSEGV, &act, NULL) < 0) {
                 perror("Cannot change signal action");
                 exit(EXIT_FAILURE);
             }
             if (setjmp(jmp)) {
-                std::cerr << "can't read memory" << std::endl;
+                std::cout << "can't read memory" << std::endl;
             } else {
                 if (i == addr) {
                     std::cout << "[";
@@ -87,9 +97,13 @@ void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
 }
 
 int SigsegvHandler::setSigsegv() {
-    struct sigaction act;
-    act.sa_flags = (SA_SIGINFO | SA_NOMASK);
+    struct sigaction act{};
+    act.sa_flags = SA_SIGINFO;
     act.sa_sigaction = &handle;
+    sigset_t sigset1{};
+    sigemptyset(&sigset1);
+    sigaddset(&sigset1, SIGSEGV);
+    act.sa_mask = sigset1;
     if (sigaction(SIGSEGV, &act, NULL) < 0) {
         perror("Can't change signal action");
         return 1;

@@ -6,8 +6,11 @@
 int main() {
     SigsegvHandler::setSigsegv();
 
-    //test
-    char* test = "aca";
-    test[3] = 't';
+    int unused[1] = {28};
+    char a[2];
+    for (char* i = a; ; ++i) {
+        *i = 42;
+    }
+
     return 0;
 }
