@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
     switch (num) {
         case 1: {
             char *s = (char *) ("CT-MEM");
-            s[10] = '!';
+            s[50] = '!';
             break;
         }
         case 2: {
