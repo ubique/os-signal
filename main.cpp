@@ -51,7 +51,6 @@ void printHeader(const char *message) {
 void printLine() {
     print_str("------------------------------------------------\n");
 }
-/*
 const std::map<const char *, uint64_t> registers = {
         {"R8",      REG_R8},
         {"R9",      REG_R9},
@@ -76,23 +75,31 @@ const std::map<const char *, uint64_t> registers = {
         {"CR2",     REG_CR2},
         {"OLDMASK", REG_OLDMASK},
         {"TRAPNO",  REG_TRAPNO},
-};*/
+};
 
-void mem_dump(size_t address) {
+void mem_dump(void* address_v) {
+    size_t address = reinterpret_cast<size_t>(address_v);
+    char *mem = reinterpret_cast<char *>(address_v);
     printHeader("MEM_DUMP");
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         print_str("Unable to dump memory\n");
         return;
     }
-    auto start = reinterpret_cast<char *>(std::max((long long) 0, (long long) ((char *) address - 16 * sizeof(char))));
-    auto end_ = reinterpret_cast<char *>(std::min(LONG_LONG_MAX, (long long) ((char *) address + 16 * (sizeof(char)))));
+    char * start = reinterpret_cast<char *>(std::max((long long) 0, (long long) ((char *) address - 16 * sizeof(char))));
+    char * end_ = reinterpret_cast<char *>(std::min(LONG_LONG_MAX, (long long) ((char *) address + 16 * (sizeof(char)))));
 
-    for (auto i = start; i < end_; i++) {
+    for (char * i = start; i < end_; i++) {
+        if(i == mem){
+            print_str("->");
+        }
         if (write(pipefd[1], i, 1) != -1) {
             print_number((static_cast<uint64_t>(*i) & 0xFFu), 1);
         } else {
             print_str("bad");
+        }
+        if(i == mem){
+            print_str("<-");
         }
        print_str(" ");
     }
@@ -101,13 +108,13 @@ void mem_dump(size_t address) {
 void registers_dump(ucontext_t *context) {
     printHeader("REGISTERS");
     printLine();
- /*   for (const auto &reg : registers) {
+    for (const auto &reg : registers) {
         print_str(reg.first);
         print_str(" | ");
         print_number(context->uc_mcontext.gregs[reg.second], 8);
         print_str("\n");
         printLine();
-    }*/
+    }
 }
 
 void handler_sigsegv(int sig_num, siginfo_t *sig_info, void *context) {
@@ -126,7 +133,7 @@ void handler_sigsegv(int sig_num, siginfo_t *sig_info, void *context) {
         }
     }
     registers_dump((ucontext_t *) context);
-    mem_dump(address);
+    mem_dump(sig_info->si_addr);
     exit(EXIT_FAILURE);
 }
 
