@@ -1,11 +1,9 @@
-#include <iostream>
 #include <unistd.h>
 #include <signal.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ucontext.h>
-#include <string>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -18,15 +16,50 @@
 
 const int PAGESIZE = 4096;
 
-std::string to_hex(size_t value) {
-    std::stringstream stream;
-    stream << std::hex << value;
-    std::string res = stream.str();
-    return "0x" + res + (res.size() == 1 ? "0" : "");
+char get_char(uint8_t num) {
+    if (num < 10) {
+        return '0' + num;
+    } else {
+        return 'A' + num - 10;
+    }
 }
 
-void write_to_stderr(const char* pointer, size_t len) {
+void to_hex(char* buffer, size_t value, size_t len_in_bytes) {
+    len_in_bytes *= 2;
+    buffer[0] = '0';
+    buffer[1] = 'x';
+    for (size_t i = 0; i < len_in_bytes; i++) {
+       buffer[2 + len_in_bytes - i - 1] = get_char(value & 0xf);
+       value >>= 4;
+    }
+}
+
+void to_str(char* buffer, int value) {
+    size_t start = 0;
+    if (value < 0) {
+        value = -value;
+        buffer[0] = '-';
+        start++;
+    }
+    int cp = value;
+    size_t lg = 0;
+    if (value == 0) {
+        lg = 1;
+    }
+    while (cp) {
+        cp /= 10;
+        lg++;
+    }
+    for (size_t i = 0; i < lg; i++) {
+       buffer[start + lg - i - 1] = '0' + value % 10;
+       value /= 10;
+    }
+    buffer[start + lg] = '\0';
+}
+
+void write_to_stderr(const char* pointer) {
     ssize_t result;
+    size_t len = strlen(pointer);
     while (len && (result = write(STDERR_FILENO, pointer, len))) {
         if (result < 0 && errno == EINTR) {
             continue;
@@ -39,11 +72,7 @@ void write_to_stderr(const char* pointer, size_t len) {
     }
 }
 
-void write_to_stderr(std::string const& pointer) {
-    write_to_stderr(pointer.c_str(), pointer.size());
-}
-
-std::string get_register_name(size_t reg) {
+const char* get_register_name(greg_t reg) {
     switch (reg) {
     case REG_R8:
         return "R8";
@@ -96,27 +125,30 @@ std::string get_register_name(size_t reg) {
     }
 }
 
-void print_error(std::string const& message) {
-    write_to_stderr(message + ": " + std::strerror(errno) + "\n");
+void print_error(const char* message) {
+    write_to_stderr(message);
+    write_to_stderr(": ");
+    write_to_stderr(std::strerror(errno));
+    write_to_stderr("\n");
 }
 
 
 void sig_handler(int sig, siginfo_t* info, void* ucontext) {
-    write_to_stderr("Segmentation fault at " + to_hex((size_t)info->si_addr) + "\n");
-    write_to_stderr("Registers:\n");
+    write_to_stderr("Segmentation fault at ");
+    char buffer[1024];
+    to_hex(buffer, (size_t)info->si_addr, 8);
+    write_to_stderr(buffer);
+    write_to_stderr("\nRegisters:\n");
     for (size_t i = 0; i < __NGREG; i++) {
-        std::string reg = get_register_name(i);
-        if (reg != "") {
-            write_to_stderr(reg + "=" + to_hex(((ucontext_t*)ucontext)->uc_mcontext.gregs[i]) + '\n');
+        const char * reg = get_register_name(i);
+        if (std::strcmp(reg, "") != 0) {
+            write_to_stderr(reg);
+            write_to_stderr("=");
+            to_hex(buffer, ((ucontext_t*)ucontext)->uc_mcontext.gregs[i], 8);
+            write_to_stderr(buffer);
+            write_to_stderr("\n");
         }
     }
-    for (size_t i = 0; i < __NGREG; i++) {
-        std::string reg = get_register_name(i);
-        if (reg != "") {
-            write_to_stderr(reg + "=" + to_hex(((ucontext_t*)ucontext)->uc_mcontext.gregs[i]) + '\n');
-        }
-    }
-
     if (info->si_addr != nullptr) {
         size_t start = 1;
         if ((size_t)info->si_addr > 64) {
@@ -135,13 +167,16 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
         size_t j = 0;
         for(char* pos = (char*)start; pos != (char*)finish; pos++, j++) {
             if (j % 8 == 0) {
-                 write_to_stderr(std::to_string((ptrdiff_t)pos - (ptrdiff_t)info->si_addr) + ":\t");
+                to_str(buffer, (ptrdiff_t)pos - (ptrdiff_t)info->si_addr);
+                write_to_stderr(buffer);
+                write_to_stderr(":\t");
             }
-            std::string data = "????";
+            std::strcpy(buffer, "????");
             if (write(fd[1], pos, 1) >= 0) {
-               data = to_hex((size_t)(*pos) & 0xff);
+               to_hex(buffer, (size_t)(*pos) & 0xff, 1);
             }
-            write_to_stderr(data + " ");
+            write_to_stderr(buffer);
+            write_to_stderr(" ");
             if (j % 8 == 7) {
                 write_to_stderr("\n");
             }
