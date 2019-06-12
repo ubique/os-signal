@@ -1,10 +1,2 @@
-all: signal
-
-run: signal
-	./signal
-
-signal:
+all: 
 	g++ -std=c++11 signal.cpp -o signal
-
-clean:
-	rm signal

@@ -1,79 +1,134 @@
 #include <iostream>
 #include <cstring>
-#include <climits>
+#include <unistd.h>
+#include <string.h>
+#include <limits>
 
-#include <csignal>
-#include <csetjmp>
+#include <signal.h>
+
 
 const int MEMORY_DUMP_RANGE = 20 * sizeof(char);
+const int ALIGN_R = 7;
 const char *registers[] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
                            "RDI", "RSI", "RBP", "RBX", "RDX", "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS",
                            "ERR", "TRAPNO", "OLDMASK", "CR2"};
 
-static jmp_buf jmpBuf;
 
-void sigsegvAddressHandler(int num, siginfo_t *siginfo, void *context)
-{
-    if (siginfo->si_signo == SIGSEGV)
-        siglongjmp(jmpBuf, 1);
+void write_h(uint8_t b) {
+    char c = (b < 10) ? char(b + '0') : char(b - 10 + 'A');
+    write(1, &c, 1);
 }
+
+void write_b(uint8_t b) {
+    write_h(b / 16);
+    write_h(b % 16);
+}
+
+void write_s(char const *str) {
+    write(1, str, strlen(str));
+}
+
+void write_r(char const *reg_s, uint64_t reg_v) {
+    write_s(reg_s);
+    write_s(": ");
+    for (int i = 0; i < ALIGN_R - strlen(reg_s); ++i) {
+        write_s(" ");
+    }
+    for (int i = 7; i >= 0; --i) {
+        write_b(0xFF & (reg_v >> (8 * i)));
+    }
+    write_s("\n");
+}   
 
 void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
 {
     if (siginfo->si_signo == SIGSEGV)
     {
-        std::cout << "Aborted: " << strsignal(num) << std::endl;
+        int ret;
+        write_s("Aborted: "); 
+        write_s(strsignal(num));
+        write_s("\n");
 
-        int signal_code = siginfo->si_code;
-        if (signal_code == SEGV_MAPERR)
+        ret = siginfo->si_code;
+        if (ret == SEGV_MAPERR)
         {
-            std::cout << "Reason: nothing is mapped to address\n";
+            write_s("Reason: nothing is mapped to address\n");
         }
-        else if (signal_code == SEGV_ACCERR)
+        else if (ret == SEGV_ACCERR)
         {
-            std::cout << "Reason: access error\n";
+            write_s("Reason: access error\n");
         }
         else
         {
-            std::cout << "Error code: " << signal_code << std::endl;
+            write_s("Error code: ");
+            write(1, &ret, sizeof(int));
+            write_s("\n");
         }
 
-        auto signal_addr = siginfo->si_addr;
-        std::cout << "Address: " << signal_addr << std::endl;
+        write_s("Registers dump: \n");
+        struct ucontext_t *ucontext = static_cast<ucontext_t*>(context);
+        write_r("R8", ucontext->uc_mcontext.gregs[REG_R8]);
+        write_r("R9", ucontext->uc_mcontext.gregs[REG_R9]);
+        write_r("R10", ucontext->uc_mcontext.gregs[REG_R10]);
+        write_r("R11", ucontext->uc_mcontext.gregs[REG_R11]);
+        write_r("R12", ucontext->uc_mcontext.gregs[REG_R12]);
+        write_r("R13", ucontext->uc_mcontext.gregs[REG_R13]);
+        write_r("R14", ucontext->uc_mcontext.gregs[REG_R14]);
+        write_r("R15", ucontext->uc_mcontext.gregs[REG_R15]);
+        write_r("RDI", ucontext->uc_mcontext.gregs[REG_RDI]);
+        write_r("RSI", ucontext->uc_mcontext.gregs[REG_RSI]);
+        write_r("RBP", ucontext->uc_mcontext.gregs[REG_RBP]);
+        write_r("RBX", ucontext->uc_mcontext.gregs[REG_RBX]);
+        write_r("RDX", ucontext->uc_mcontext.gregs[REG_RDX]);
+        write_r("RAX", ucontext->uc_mcontext.gregs[REG_RAX]);
+        write_r("RCX", ucontext->uc_mcontext.gregs[REG_RCX]);
+        write_r("RSP", ucontext->uc_mcontext.gregs[REG_RSP]);
+        write_r("RIP", ucontext->uc_mcontext.gregs[REG_RIP]);
+        write_r("EFL", ucontext->uc_mcontext.gregs[REG_EFL]);
+        write_r("CSGSFS", ucontext->uc_mcontext.gregs[REG_CSGSFS]);
+        write_r("ERR", ucontext->uc_mcontext.gregs[REG_ERR]);
+        write_r("TRAPNO", ucontext->uc_mcontext.gregs[REG_TRAPNO]);
+        write_r("OLDMASK", ucontext->uc_mcontext.gregs[REG_OLDMASK]);
+        write_r("CR2", ucontext->uc_mcontext.gregs[REG_CR2]);
+        
+        write_s("Memory dump: \n");
 
-        std::cout << "Registers dump: \n";
-        for (size_t i = 0; i < NGREG; ++i)
-            std::cout << "\t" << registers[i] << ": 0x" << std::hex << ((ucontext_t *)context)->uc_mcontext.gregs[i] << std::endl;
-
-        std::cout << "Memory dump: \n";
-
-        const long long from = std::max(0LL, (long long)((char *)signal_addr - MEMORY_DUMP_RANGE));
-        const long long to = std::min(LONG_LONG_MAX, (long long)((char *)signal_addr + MEMORY_DUMP_RANGE));
-
-        for (long long i = from; i < to; i += sizeof(char))
-        {
-            sigset_t setSignal;
-            sigemptyset(&setSignal);
-            sigaddset(&setSignal, SIGSEGV);
-            sigprocmask(SIG_UNBLOCK, &setSignal, nullptr);
-            struct sigaction sAction
-            {
-            };
-            sAction.sa_sigaction = sigsegvAddressHandler;
-            sAction.sa_flags = SA_SIGINFO;
-            if (sigaction(SIGSEGV, &sAction, nullptr) == -1)
-            {
-                perror("Error occurred during sigaction");
-                exit(-1);
+        int pipe_fd[2];
+        ret = pipe(pipe_fd);
+        if (ret == -1) {
+            write_s("Can't pipe\n");
+            exit(0);
+        }
+        for (int i = -8; i < 8; i++) {
+            char *t = (char*) (siginfo->si_addr) + i;
+            ret = write(pipe_fd[1], t, 1);
+            
+            if (i == 0) {
+                write_s("[");
+            } else {
+                write_s(" ");
             }
-            std::cout << "\t" << (void *)i << ": ";
-            if (setjmp(jmpBuf) != 0)
-            {
-                std::cout << "failed to dump" << std::endl;
+            
+            if (ret == -1) {
+                write_s("??");
+            } else {
+                uint8_t value;
+                ret = read(pipe_fd[0], &value, 1);
+                if (ret == -1) {
+                    write_s("??");
+                } else {
+                    write_b(value);
+                }
             }
-            else
-            {
-                std::cout << std::hex << (int)((const char *)i)[0] << std::endl;
+            
+            if (i == 0) {
+                write_s("] ");
+            } else {
+                write_s("  ");
+            }
+
+            if ((i & 15) == 15) {
+                write_s("\n");
             }
         }
     }
@@ -83,37 +138,29 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
 int main(int argc, char *argv[], char *envp[])
 {
     struct sigaction action {};
-    action.sa_sigaction = sigsegvHandler;
+    int ret;
     action.sa_flags = SA_SIGINFO;
-    if (sigaction(SIGSEGV, &action, nullptr) == -1)
-    {
-        perror("Error occurred during sigaction");
+    ret = sigemptyset(&action.sa_mask);
+    if (ret == -1) {
+        fprintf(stderr, "sigemptyset: %s\n", strerror(errno));
         return -1;
     }
-    std::cout << "1. Nullptr test\n"
-                 "2. Left-bound test\n"
-                 "3. Right-bound test\n";
-    std::cout << "Choose number: ";
 
-    unsigned short ans = -1;
-    std::cin >> ans;
+    action.sa_sigaction = sigsegvHandler;
+    ret = sigaction(SIGSEGV, &action, nullptr);
+    if (ret == -1) {
+        fprintf(stderr, "sigaction: %s\n", strerror(errno));
+        return -1;
+    }
     char *test;
-    switch (ans)
-    {
-    case 1:
+    //case 1:
         test = nullptr;
         *test = 1;
-        break;
-    case 2:
-        test = (char *)"data";
-        *(--test) = 'A';
-        break;
-    case 3:
-        test = (char *)"data";
-        test[5] = '1';
-        break;
-    default:
-        std::cout << "Incorrect input: expected number of option\n";
-    }
+    //case 2:
+        // test = (char *)"data";
+        // *(--test) = 'A';
+    //case 3:
+        // test = (char *)"data";
+        // test[5] = '1';
     return 0;
 }
