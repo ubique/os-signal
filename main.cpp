@@ -16,6 +16,8 @@
 #include <sys/mman.h>
 #include <vector>
 
+const int PAGESIZE = 4096;
+
 std::string to_hex(size_t value) {
     std::stringstream stream;
     stream << std::hex << value;
@@ -153,6 +155,21 @@ int main() {
         perror("sigaction failed");
         return EXIT_FAILURE;
     }
-    char* a = (char*)"hello";
-    a[3] = 'b';
+    char* a;
+    char* alligned;
+    a = (char *)malloc(2 * PAGESIZE + 1024 - 1);
+    if (a == nullptr) {
+        perror("malloc failed");
+        return EXIT_FAILURE;
+    }
+    alligned = (char *)(((size_t) a + PAGESIZE - 1) & ~(PAGESIZE - 1));
+    for (size_t i = 0; i < 2 * PAGESIZE; i++) {
+        alligned[i] = 'A' + i % 26;
+    }
+    if (mprotect(alligned, PAGESIZE, PROT_NONE) < 0) {
+        perror("mprotect");
+        return EXIT_FAILURE;
+    }
+    alligned[PAGESIZE - 1] = 'y';
+    free(a);
 }
