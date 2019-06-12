@@ -47,7 +47,7 @@ void SigsegvHandler::myHandle(int sig, siginfo_t *siginfo, void *ucontext) {
     }
 }
 
-void writeString(const char* s) {
+void writeString(const char *s) {
     write(STDOUT_FILENO, s, strlen(s));
 }
 
@@ -62,14 +62,21 @@ void outSymbol(uint8_t k) {
 }
 
 void outByte(uint8_t b) {
-    outSymbol(b/16);
+    outSymbol(b / 16);
     outSymbol(b % 16);
 }
 
 void writeNum(uint64_t num) {
     for (int i = 7; i >= 0; i--) {
-        outByte((num >> (i*8)) & 0xff);
+        outByte((num >> (i * 8)) & 0xff);
     }
+}
+
+void writeReg(const char *reg, uint64_t num) {
+    writeString(reg);
+    writeString(" = ");
+    writeNum(num);
+    writeString("\n");
 }
 
 void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
@@ -77,17 +84,34 @@ void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
         writeString(strsignal(s));
         writeString("\n___REGISTERS___\n");
         ucontext_t *ucontext = (ucontext_t *) context;
-        for (auto &reg: registers) {
-            writeString(reg.first.data());
-            writeString(" = ");
-            writeNum(ucontext->uc_mcontext.gregs[reg.second]);
-            writeString("\n");
-        }
+        writeReg("R8", ucontext->uc_mcontext.gregs[REG_R8]);
+        writeReg("R9", ucontext->uc_mcontext.gregs[REG_R9]);
+        writeReg("R10", ucontext->uc_mcontext.gregs[REG_R10]);
+        writeReg("R11", ucontext->uc_mcontext.gregs[REG_R11]);
+        writeReg("R12", ucontext->uc_mcontext.gregs[REG_R12]);
+        writeReg("R13", ucontext->uc_mcontext.gregs[REG_R13]);
+        writeReg("R14", ucontext->uc_mcontext.gregs[REG_R14]);
+        writeReg("R15", ucontext->uc_mcontext.gregs[REG_R15]);
+        writeReg("RAX", ucontext->uc_mcontext.gregs[REG_RAX]);
+        writeReg("RBP", ucontext->uc_mcontext.gregs[REG_RBP]);
+        writeReg("RBX", ucontext->uc_mcontext.gregs[REG_RBX]);
+        writeReg("RCX", ucontext->uc_mcontext.gregs[REG_RCX]);
+        writeReg("RDI", ucontext->uc_mcontext.gregs[REG_RDI]);
+        writeReg("RDX", ucontext->uc_mcontext.gregs[REG_RDX]);
+        writeReg("RIP", ucontext->uc_mcontext.gregs[REG_RIP]);
+        writeReg("RSI", ucontext->uc_mcontext.gregs[REG_RSI]);
+        writeReg("RSP", ucontext->uc_mcontext.gregs[REG_RSP]);
+        writeReg("CR2", ucontext->uc_mcontext.gregs[REG_CR2]);
+        writeReg("CSGSFS", ucontext->uc_mcontext.gregs[REG_CSGSFS]);
+        writeReg("EFL", ucontext->uc_mcontext.gregs[REG_EFL]);
+        writeReg("ERR", ucontext->uc_mcontext.gregs[REG_ERR]);
+        writeReg("OLDMASK", ucontext->uc_mcontext.gregs[REG_OLDMASK]);
+        writeReg("TRAPNO", ucontext->uc_mcontext.gregs[REG_TRAPNO]);
         writeString("___MEMORY___");
         char *addr = (char *) siginfo->si_addr;
         char *maxc = std::numeric_limits<char *>::max();
         char *left, *right;
-        if (addr > (char*) NUM) left = addr - NUM;
+        if (addr > (char *) NUM) left = addr - NUM;
         else left = NULL;
         if (addr < maxc - NUM) right = addr + NUM;
         else right = maxc;
