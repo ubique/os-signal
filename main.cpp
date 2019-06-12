@@ -32,6 +32,7 @@ void to_hex(char* buffer, size_t value, size_t len_in_bytes) {
        buffer[2 + len_in_bytes - i - 1] = get_char(value & 0xf);
        value >>= 4;
     }
+    buffer[2 + len_in_bytes] = '\0';
 }
 
 void to_str(char* buffer, int value) {
