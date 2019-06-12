@@ -85,10 +85,10 @@ void mem_dump(size_t address) {
         print_str("Unable to dump memory\n");
         return;
     }
-    auto start = reinterpret_cast<char *>(std::max((long long) 0, (long long) ((char *) address - 25 * sizeof(char))));
-    auto end_ = reinterpret_cast<char *>(std::min(LONG_LONG_MAX, (long long) ((char *) address + 25 * (sizeof(char)))));
+    auto start = reinterpret_cast<char *>(std::max((long long) 0, (long long) ((char *) address - 16 * sizeof(char))));
+    auto end_ = reinterpret_cast<char *>(std::min(LONG_LONG_MAX, (long long) ((char *) address + 16 * (sizeof(char)))));
 
-    for (auto i = start; i < end_; i+= 2) {
+    for (auto i = start; i < end_; i++) {
         if (write(pipefd[1], i, 1) != -1) {
             print_number((static_cast<uint64_t>(*i) & 0xFFu), 1);
         } else {
