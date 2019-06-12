@@ -8,17 +8,15 @@
 
 #include <signal.h>
 #include <vector>
+#include <string>
 
 void hnd(int, siginfo_t *, void *);
-
 
 class Handler {
     using foo = void (*)(int, siginfo_t *, void *);
 public:
 
     explicit Handler(foo function = &hnd);
-
-    static const std::vector<std::pair<std::string, long long>> registers;
 
 private:
 
