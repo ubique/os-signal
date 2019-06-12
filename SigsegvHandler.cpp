@@ -15,30 +15,6 @@
 
 jmp_buf jmp;
 
-const std::map<std::string, int> registers = {{"R8",      REG_R8},
-                                              {"R9",      REG_R9},
-                                              {"R10",     REG_R10},
-                                              {"R11",     REG_R11},
-                                              {"R12",     REG_R12},
-                                              {"R13",     REG_R13},
-                                              {"R14",     REG_R14},
-                                              {"R15",     REG_R15},
-                                              {"RAX",     REG_RAX},
-                                              {"RBP",     REG_RBP},
-                                              {"RBX",     REG_RBX},
-                                              {"RCX",     REG_RCX},
-                                              {"RDI",     REG_RDI},
-                                              {"RDX",     REG_RDX},
-                                              {"RIP",     REG_RIP},
-                                              {"RSI",     REG_RSI},
-                                              {"RSP",     REG_RSP},
-                                              {"CR2",     REG_CR2},
-                                              {"CSGSFS",  REG_CSGSFS},
-                                              {"EFL",     REG_EFL},
-                                              {"ERR",     REG_ERR},
-                                              {"OLDMASK", REG_OLDMASK},
-                                              {"TRAPNO",  REG_TRAPNO}};
-
 const int NUM = 8;
 
 void SigsegvHandler::myHandle(int sig, siginfo_t *siginfo, void *ucontext) {
