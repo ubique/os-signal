@@ -9,20 +9,34 @@
 #include <sys/ucontext.h>
 #include <iostream>
 #include <iomanip>
-#include <zconf.h>
+#include <unistd.h>
 #include <limits>
 
 
 static const size_t RADIUS = 16;
 
+static inline std::string normalize_hex(size_t hex, size_t width) {
+    std::string res = "0x";
+    std::string val = std::to_string(hex);
+    std::string zeroes(width - val.size(), '0');
+
+    res += zeroes + val;
+
+    return res;
+}
+
+void print_string(std::string const& str) {
+    write(STDERR_FILENO, str.data(), str.size());
+}
+
 static inline void print_address(size_t address) {
-    std::cerr << "0x" << std::setw(16) << std::setfill('0') << std::right << address;
+    print_string(normalize_hex(address, 16));
 }
 
 static inline void print_register(std::string const& name, size_t reg) {
-    std::cerr << name << ": ";
+    print_string(name + ": ");
     print_address(reg);
-    std::cerr << std::endl;
+    print_string("\n");
 }
 
 static inline std::string get_cause(siginfo_t* info) {
@@ -43,7 +57,7 @@ static inline std::string get_cause(siginfo_t* info) {
 }
 
 static inline void dump_registers(void* context) {
-    std::cerr << "General purpose registers dump: " << std::endl;
+    print_string("General purpose registers dump: \n");
     auto ucontext = reinterpret_cast<ucontext_t*>(context);
     greg_t* regs = ucontext->uc_mcontext.gregs;
 
@@ -68,7 +82,7 @@ static inline void dump_memory(size_t address) {
     int pipefd[2];
 
     if (pipe(pipefd) == -1) {
-        std::cerr << "Couldn't dump memory" << std::endl;
+        print_string("Couldn't dump memory\n");
         return;
     }
 
@@ -77,37 +91,32 @@ static inline void dump_memory(size_t address) {
     auto end = reinterpret_cast<char*>(std::numeric_limits<size_t>::max() - RADIUS >= address
             ? address + RADIUS : std::numeric_limits<size_t>::max());
 
-    std::cerr << "Memory dump: " << std::endl;
+    print_string("Memory dump: \n");
     for (auto i = begin; i < end; i++) {
         if (write(pipefd[1], i, 1) != -1) {
-            std::cerr << "0x" << std::setw(2) << std::setfill('0') << (static_cast<uint32_t>(*i) & 0xFFu);
+            print_string(normalize_hex((static_cast<uint32_t>(*i) & 0xFFu), 2));
         } else {
-            std::cerr << "??";
+            print_string("????");
         }
-        std::cerr << ' ';
+        print_string(" ");
     }
-    std::cerr << std::endl;
+    print_string("\n");
     for (auto i = begin; i < ptr; i++) {
-        if (write(pipefd[1], i, 1) != -1) {
-            std::cerr << "     ";
-        } else {
-            std::cerr << "   ";
-        }
+        print_string("     ");
     }
-    std::cerr << "^ Memory violation";
+    print_string("^ Memory violation");
 }
 
 static inline  void sigsegv_handler(int sig, siginfo_t* info, void* context) {
     auto address = reinterpret_cast<size_t>(info->si_addr);
-    std::cerr << std::hex;
 
-    std::cerr << "Memory violation occurred at address: ";
+    print_string("Memory violation occurred at address: ");
     print_address(address);
-    std::cerr << std::endl;
+    print_string("\n");
 
-    std::cerr << "Cause: " << get_cause(info) << std::endl;
+    print_string("Cause: " + get_cause(info) + "\n");
 
-    dump_registers(context);
+    //dump_registers(context);
     dump_memory(address);
 
     exit(EXIT_FAILURE);
