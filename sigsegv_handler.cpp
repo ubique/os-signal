@@ -1,12 +1,7 @@
-#include <iostream>
-#include <limits>
+#include <unistd.h>
+#include <cstring>
 #include <cstdio>
-#include <cstdlib>
 #include "sigsegv_handler.h"
-
-using namespace std;
-
-jmp_buf sigsegv_handler::jmp;
 
 int sigsegv_handler::set_sigsegv_handler() {
     struct sigaction act;
@@ -19,38 +14,64 @@ int sigsegv_handler::set_sigsegv_handler() {
     return 0;
 }
 
-void sigsegv_handler::deref_handler(int sig) {
-    longjmp(jmp, 1);
+void sigsegv_handler::write_str(const char *s) {
+    write(1, s, strlen(s));
+}
+
+void sigsegv_handler::write_num(long long a) {
+    if (a < 0) {
+        write_str("-");
+        a = -a;
+    }
+    if (a == 0) {
+        write_str("0");
+        return;
+    }
+    char num[25];
+    num[24] = '\0';
+    int i = 23;
+    while (a > 0) {
+        num[i] = '0' + (a % 10);
+        a /= 10;
+        i--;
+    }
+    write_str(num + i + 1);
 }
 
 void sigsegv_handler::handler(int, siginfo_t *siginfo, void *context) {
-    cout << "--REGISTERS--" << endl;
+    write_str("--REGISTERS--\n");
     ucontext_t *ucontext = (ucontext_t *) context;
     for (int i = 0; i < NGREG; i++) {
-        cout << "reg[" << i << "] = " << ucontext->uc_mcontext.gregs[i] << endl;
+        write_str("reg[");
+        write_num(i);
+        write_str("] = ");
+        write_num(ucontext->uc_mcontext.gregs[i]);
+        write_str("\n");
     }
 
-    struct sigaction act;
-    act.sa_flags = SA_NODEFER;
-    act.sa_handler = &deref_handler;
-    if (sigaction(SIGSEGV, &act, NULL) < 0) {
-        perror("Cannot change signal action");
-        exit(EXIT_FAILURE);
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
+        write_str("Cannot create pipe");
     }
 
-    cout << "--MEMORY--" << endl;
+    write_str("--MEMORY--\n");
     char *addr = (char *) siginfo->si_addr;
-    char *max_ = numeric_limits<char *>::max();
-    char *left = (addr > (char *) 16 ? addr - 16 : NULL);
-    char *right = (addr < max_ - 16 ? addr + 16 : max_);
-    for (char *i = left ; i <= right; i++) {
-        if (setjmp(jmp)) {
-            cout << "cannot read memory" << endl;
-        } else {
-            if (i == siginfo->si_addr)
-                cout << "here: ";
-            cout << (int) *i << endl;
-        }
+    for (int shift = -16; shift <= 16; shift++) {
+        char *i = addr + shift;
+        char mem;
+        if (shift < 0 && i > addr)
+            continue;
+        if (shift > 0 && i < addr)
+            continue;
+        if (i == addr)
+            write_str("here: ");
+        if (write(pipefd[1], i, 1) < 0)
+            write_str("Cannot read memory");
+        else if (read(pipefd[0], &mem, 1) < 0)
+            write_str("Cannot read memory");
+        else
+            write_num(mem);
+        write_str("\n");
     }
-    exit(EXIT_FAILURE);
+    _exit(1);
 }
