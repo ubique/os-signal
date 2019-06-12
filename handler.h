@@ -1,10 +1,7 @@
 #ifndef OS_SIGNAL_HANDLER_H
 #define OS_SIGNAL_HANDLER_H
 
-
 #include <signal.h>
-#include <string>
-#include <vector>
 #include <csetjmp>
 
 void hand(int sig, siginfo_t *siginfo, void *ucontext);

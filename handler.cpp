@@ -1,37 +1,66 @@
-#include <sys/ucontext.h>
-#include <bits/types/siginfo_t.h>
-#include <iostream>
-#include <memory.h>
 #include <limits>
+#include <unistd.h>
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
 #include "handler.h"
 
 static jmp_buf jmpbuf;
 
-const std::vector<std::pair<std::string, int>> registers{
-        {"R8",      REG_R8},
-        {"R9",      REG_R9},
-        {"R10",     REG_R10},
-        {"R11",     REG_R11},
-        {"R12",     REG_R12},
-        {"R13",     REG_R13},
-        {"R14",     REG_R14},
-        {"R15",     REG_R15},
-        {"RAX",     REG_RAX},
-        {"RBP",     REG_RBP},
-        {"RSP",     REG_RSP},
-        {"RSI",     REG_RSI},
-        {"RIP",     REG_RIP},
-        {"RDX",     REG_RDX},
-        {"RDI",     REG_RDI},
-        {"RCX",     REG_RCX},
-        {"RBX",     REG_RBX},
-        {"TRAPNO",  REG_TRAPNO},
-        {"OLDMASK", REG_OLDMASK},
-        {"CSGSFS",  REG_CSGSFS},
-        {"ERR",     REG_ERR},
-        {"EFL",     REG_EFL},
-        {"CR2",     REG_CR2},
-};
+void write_string(const char *str) {
+    write(1, str, strlen(str));
+}
+
+void write_char(char ch) {
+    write(1, &ch, 1);
+}
+
+void write_hex(uint8_t num) {
+    write_char(num >= 10 ? 'A' + num - 10 : '0' + num);
+}
+
+void write_num(uint64_t num) {
+    for (int i = 0; i < 8; ++i) {
+        write_hex(num >> 8);
+        write_hex(num >> 4);
+        num >>= 8;
+    }
+}
+
+void write_reg(const char *name, uint64_t reg) {
+    write_string(name);
+    write_string(": ");
+    write_num(reg);
+    write_string("\n");
+}
+
+void write_regs(void *cont) {
+    auto *context = reinterpret_cast<ucontext_t *>(cont);
+    write_reg("R8", context->uc_mcontext.gregs[REG_R8]);
+    write_reg("R9", context->uc_mcontext.gregs[REG_R9]);
+    write_reg("R10", context->uc_mcontext.gregs[REG_R10]);
+    write_reg("R11", context->uc_mcontext.gregs[REG_R11]);
+    write_reg("R12", context->uc_mcontext.gregs[REG_R12]);
+    write_reg("R13", context->uc_mcontext.gregs[REG_R13]);
+    write_reg("R14", context->uc_mcontext.gregs[REG_R14]);
+    write_reg("R15", context->uc_mcontext.gregs[REG_R15]);
+    write_reg("RAX", context->uc_mcontext.gregs[REG_RAX]);
+    write_reg("RBP", context->uc_mcontext.gregs[REG_RBP]);
+    write_reg("RSP", context->uc_mcontext.gregs[REG_RSP]);
+    write_reg("RSI", context->uc_mcontext.gregs[REG_RSI]);
+    write_reg("RIP", context->uc_mcontext.gregs[REG_RIP]);
+    write_reg("RDX", context->uc_mcontext.gregs[REG_RDX]);
+    write_reg("RDI", context->uc_mcontext.gregs[REG_RDI]);
+    write_reg("RCX", context->uc_mcontext.gregs[REG_RCX]);
+    write_reg("RBX", context->uc_mcontext.gregs[REG_RBX]);
+    write_reg("TRAPNO", context->uc_mcontext.gregs[REG_TRAPNO]);
+    write_reg("OLDMASK", context->uc_mcontext.gregs[REG_OLDMASK]);
+    write_reg("CSGSFS", context->uc_mcontext.gregs[REG_CSGSFS]);
+    write_reg("ERR", context->uc_mcontext.gregs[REG_ERR]);
+    write_reg("EFL", context->uc_mcontext.gregs[REG_EFL]);
+    write_reg("CR2", context->uc_mcontext.gregs[REG_CR2]);
+}
 
 handler::handler(void (*foo)(int, siginfo_t *, void *)) {
     struct sigaction act{};
@@ -55,14 +84,15 @@ void help_handler(int sig, siginfo_t *siginfo, void *context) {
 }
 
 void hand(int sig, siginfo_t *siginfo, void *context) {
-    std::cout << strsignal(sig) << "on address: " << siginfo->si_addr << "\n";
-    std::cout << "general purpose registers:" << "\n";
-    for (auto &reg : registers) {
-        std::cout << reg.first << ": " << reinterpret_cast<ucontext_t *>(context)->uc_mcontext.gregs[reg.second]
-                  << "\n";
-    }
+    write_string(strsignal(sig));
+    write_string("on address: ");
+    write_num((uint64_t) siginfo->si_addr);
+    write_string("\n");
+    write_string("general purpose registers:\n");
+    write_regs(context);
+
     if (siginfo->si_addr == nullptr) {
-        std::cout << "nullptr" << "\n";
+        write_string("nullptr\n");
         exit(EXIT_FAILURE);
     }
     size_t pointer = reinterpret_cast<size_t >(siginfo->si_addr);
@@ -76,16 +106,23 @@ void hand(int sig, siginfo_t *siginfo, void *context) {
     sigemptyset(&sset);
     sigaddset(&sset, SIGSEGV);
 
-    std::cout << "from " << left << " to " << right << " \n";
+    write_string("from ");
+    write_num(left);
+    write_string(" to ");
+    write_num(right);
+    write_string(" \n");
+
     for (size_t i = left; i < right; i += sizeof(char)) {
         sigprocmask(SIG_UNBLOCK, &sset, nullptr);
         handler handler1(&help_handler);
         if (i == pointer) {
-            std::cout << " !! ";
+            write_string(" !! ");
         } else if (setjmp(jmpbuf) != 0) {
-            std::cout << " ?? ";
+            write_string(" ?? ");
         } else {
-            std::cout << " " << *reinterpret_cast<char *>(i) << " ";
+            write_string(" ");
+            write_char(*reinterpret_cast<char *>(i));
+            write_string(" ");
         }
     }
     exit(EXIT_FAILURE);
