@@ -8,6 +8,6 @@
 int main() {
     sigsegv_handler handler(&handle);
 
-    char* null = 0;
+    char* null = nullptr;
     *null = 10;
 }
