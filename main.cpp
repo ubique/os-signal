@@ -1,158 +1,132 @@
-#include <csignal>
-#include <cstdlib>
-#include <cstring>
-#include <cstdio>
+#include <sys/param.h>
+#include <sys/ucontext.h>
 #include <iostream>
-#include <cmath>
-#include <csetjmp>
-#include <limits.h>
-void printError(const std::string &message) {
-    std::cerr << message << ":" << strerror(errno) << std::endl;
+#include <iomanip>
+#include  <cstring>
+#include <unistd.h>
+#include <limits>
+#include <signal.h>
+#include <map>
+static const size_t RADIUS = 8;
+
+void print_char(uint8_t k) {
+    write(1, &k, 1);
 }
 
-template<typename T>
-void print(const T &message) {
-    std::cout << message;
+void print_str(const char *s) {
+    write(1, s, strlen(s));
 }
 
-template<typename T>
-void println(const T &message) {
-    std::cout << message << std::endl;
+void print_s(uint8_t val) {
+    char c;
+    c = val < 10 ? val + '0' : val + 'A' - 10;
+    write(1, &c, 1);
 }
 
-void printHeader(const std::string &message) {
-    std::cout << ">>>>>>>>>>>" << message << "<<<<<<<<<<<<<<<" << std::endl;
+void print_byte(uint8_t k) {
+    print_s(k / 16);
+    print_s(k % 16);
+}
+
+
+void print_number(uint64_t num, size_t sz) {
+    print_str("0x");
+    for (int i = sz; i >= 1; --i) {
+        print_byte(0xFF & (num >> (8 * (i - 1))));
+    }
+}
+
+
+void printError(const char *message) {
+    print_str(message);
+}
+
+
+void printHeader(const char *message) {
+    print_str(">>>>>>>>>>>");
+    print_str(message);
+    print_str("<<<<<<<<<<<<<<<\n");
 }
 
 void printLine() {
-    std::cout << "-----------------------------" << std::endl;
+    print_str("------------------------------------------------\n");
 }
 
-const char *get_reg(int reg) {
-    switch (reg) {
-        case 0:
-            return "REG_R8";
-        case 1:
-            return "REG_R9";
-        case 2:
-            return "REG_R10";
-        case 3:
-            return "REG_R11";
-        case 4:
-            return "REG_R12";
-        case 5:
-            return "REG_R13";
-        case 6:
-            return "REG_R14";
-        case 7:
-            return "REG_R15";
-        case 8:
-            return "REG_RDI";
-        case 9:
-            return "REG_RSI";
-        case 10:
-            return "REG_RBP";
-        case 11:
-            return "REG_RBX";
-        case 12:
-            return "REG_RDX";
-        case 13:
-            return "REG_RAX";
-        case 14:
-            return "REG_RCX";
-        case 15:
-            return "REG_RSP";
-        case 16:
-            return "REG_RIP";
-        case 17:
-            return "REG_EFL";
-        case 18:
-            return "REG_CSGSFS";
-        case 19:
-            return "REG_ERR";
-        case 20:
-            return "REG_TRAPNO";
-        case 21:
-            return "REG_OLDMASK";
-        case 22:
-            return "REG_CR2";
-        default:
-            return "REG_UNKNOWN";
-    }
-}
+const std::map<const char *, uint64_t> registers = {
+        {"R8",      REG_R8},
+        {"R9",      REG_R9},
+        {"R10",     REG_R10},
+        {"R11",     REG_R11},
+        {"R12",     REG_R12},
+        {"R13",     REG_R13},
+        {"R14",     REG_R14},
+        {"R15",     REG_R15},
+        {"RAX",     REG_RAX},
+        {"RBX",     REG_RBX},
+        {"RCX",     REG_RCX},
+        {"RDX",     REG_RDX},
+        {"RDI",     REG_RDI},
+        {"RBP",     REG_RBP},
+        {"RIP",     REG_RIP},
+        {"RSP",     REG_RSP},
+        {"RSI",     REG_RSI},
+        {"ERR",     REG_ERR},
+        {"EFL",     REG_EFL},
+        {"CSGSFS",  REG_CSGSFS},
+        {"CR2",     REG_CR2},
+        {"OLDMASK", REG_OLDMASK},
+        {"TRAPNO",  REG_TRAPNO},
+};
 
-
-void print_register(int r, ucontext_t *context) {
-    printf("%-15s\t | 0x%x \n", get_reg(r), (unsigned int) context->uc_mcontext.gregs[r]);
-    printLine();
-}
-
-static jmp_buf jbuf;
-
-void handler(int signum, siginfo_t *siginfo, void *context) {
-    if (siginfo->si_signo == SIGSEGV) {
-        siglongjmp(jbuf, 1);
-    }
-}
-
-void address_dump(long long address) {
-    sigset_t sigset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGSEGV);
-    sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
-
-    struct sigaction action{};
-    memset(&action, 0, sizeof(action));
-    action.sa_sigaction = handler;
-    action.sa_flags = SA_SIGINFO;
-
-    if (sigaction(SIGSEGV, &action, nullptr) < 0) {
-        printError("Sigaction failed");
-        exit(EXIT_FAILURE);
-    }
-    const char *p = (const char *) address;
-    if (setjmp(jbuf) == 0) {
-        printf("ADDRESS %p | %x\n", (void *) address, (int) p[0]);
-    } else {
-        printf("ADDRESS %p | bad\n", (void *) address);
-    }
-    printLine();
-}
-
-void mem_dump(void *address) {
-    long long start, end_;
+void mem_dump(size_t address) {
     printHeader("MEM_DUMP");
-    start = std::max((long long) 0, (long long) ((char *) address - 20 * sizeof(char)));
-    end_ = std::min(LONG_LONG_MAX, (long long) ((char *) address + 20 * (sizeof(char))));
-    for (long long i = start; i < end_; i += sizeof(char)) {
-        address_dump(i);
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        print_str("Unable to dump memory\n");
+        return;
+    }
+    auto start = reinterpret_cast<char *>(std::max((long long) 0, (long long) ((char *) address - 25 * sizeof(char))));
+    auto end_ = reinterpret_cast<char *>(std::min(LONG_LONG_MAX, (long long) ((char *) address + 25 * (sizeof(char)))));
+
+    for (auto i = start; i < end_; i+= 2) {
+        if (write(pipefd[1], i, 1) != -1) {
+            print_number((static_cast<uint64_t>(*i) & 0xFFu), 1);
+        } else {
+            print_str("bad");
+        }
+        print_str("\n");
     }
 }
 
 void registers_dump(ucontext_t *context) {
     printHeader("REGISTERS");
     printLine();
-    for (int r = 0; r < NGREG; ++r) {
-        print_register(r, context);
+    for (const auto &reg : registers) {
+        print_str(reg.first);
+        print_str(" | ");
+        print_number(context->uc_mcontext.gregs[reg.second], 8);
+        print_str("\n");
+        printLine();
     }
 }
 
-
 void handler_sigsegv(int sig_num, siginfo_t *sig_info, void *context) {
+    size_t address = reinterpret_cast<size_t>(sig_info->si_addr);
     if (sig_info->si_signo == SIGSEGV) {
-        println("!--->SIGSEGV_FAULT<---!");
-        print("No access to ");
-        std::cout << sig_info->si_addr << std::endl;
+        print_str("!--->SIGSEGV_FAULT<---!\n");
+        print_str("No access to ");
+        print_number(address, 8);
+        print_str("\n");
         if (sig_info->si_code == SEGV_ACCERR) {
-            println("No permission for mapped object.");
+            print_str("No permission for mapped object.\n");
         } else if (sig_info->si_code == SEGV_MAPERR) {
-            println("Not mapped to object.");
+            print_str("Not mapped to object.\n");
         } else {
-            println("Unknown ERROR");
+            print_str("Unknown ERROR\n");
         }
     }
     registers_dump((ucontext_t *) context);
-    mem_dump(sig_info->si_addr);
+    mem_dump(address);
     exit(EXIT_FAILURE);
 }
 
@@ -166,16 +140,15 @@ int main(int argc, char **argv) {
         printError("Sigaction error");
         exit(EXIT_FAILURE);
     }
-    std::cout << R"BLOCK(CHOOSE PROGRAMME:
-1 -- OUT OF BOUNDS
-2 -- NULL)BLOCK";
-    std::cout << std::endl;
+    print_str("]CHOOSE PROGRAMME:\n");
+    print_str("1 -- OUT OF BOUNDS\n");
+    print_str("2 -- NULL\n");
     int num;
     std::cin >> num;
     switch (num) {
         case 1: {
             char *s = (char *) ("CT-MEM");
-            s[6] = '!';
+            s[10] = '!';
             break;
         }
         case 2: {
