@@ -51,7 +51,7 @@ void printHeader(const char *message) {
 void printLine() {
     print_str("------------------------------------------------\n");
 }
-
+/*
 const std::map<const char *, uint64_t> registers = {
         {"R8",      REG_R8},
         {"R9",      REG_R9},
@@ -76,7 +76,7 @@ const std::map<const char *, uint64_t> registers = {
         {"CR2",     REG_CR2},
         {"OLDMASK", REG_OLDMASK},
         {"TRAPNO",  REG_TRAPNO},
-};
+};*/
 
 void mem_dump(size_t address) {
     printHeader("MEM_DUMP");
@@ -94,20 +94,20 @@ void mem_dump(size_t address) {
         } else {
             print_str("bad");
         }
-        print_str("\n");
+       print_str(" ");
     }
 }
 
 void registers_dump(ucontext_t *context) {
     printHeader("REGISTERS");
     printLine();
-    for (const auto &reg : registers) {
+ /*   for (const auto &reg : registers) {
         print_str(reg.first);
         print_str(" | ");
         print_number(context->uc_mcontext.gregs[reg.second], 8);
         print_str("\n");
         printLine();
-    }
+    }*/
 }
 
 void handler_sigsegv(int sig_num, siginfo_t *sig_info, void *context) {
