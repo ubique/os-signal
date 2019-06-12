@@ -4,24 +4,14 @@
 
 #include <iostream>
 #include <signal.h>
-#include <sstream>
 #include <cstring>
 #include <unistd.h>
 #include <limits>
-#include <algorithm>
-#include <iomanip>
+#include <assert.h>
 
 static const size_t RANGE = 32;
 
-std::string get_hex(size_t n, bool is_reg = false) {
-    std::stringstream stream;
-    stream << std::setfill('0') << std::setw(is_reg ? 16 : 2) << std::hex << n;
-    std::string hex(stream.str());
-
-    return hex;
-}
-
-void print_err(const std::string &message) {
+void print_err(const char *message) {
     std::cerr << "\033[31m" << message;
     if (errno) {
         std::cerr << ": " << std::strerror(errno);
@@ -29,22 +19,34 @@ void print_err(const std::string &message) {
     std::cerr << "\033[0m" << std::endl;
 }
 
-void write(const std::string &msg) {
+void write_str(const char *msg) {
+    write(STDERR_FILENO, msg, strlen(msg));
+}
 
-    int size = msg.length();
+void write_half_byte(uint8_t half_byte) {
+    char c;
+    if (half_byte < 10) {
+        c = '0' + half_byte;
+    } else {
+        c = 'a' + (half_byte - 10);
+    }
 
-    int total = 0;
-    while (total < size) {
-        int was_send = write(STDERR_FILENO, msg.data() + total, size - total);
-        if (was_send == -1) {
-            throw std::runtime_error("Write failed");
-        }
+    write(STDERR_FILENO, &c, 1);
+}
 
-        total += was_send;
+void write_byte(uint8_t byte) {
+    write_half_byte(byte / 16);
+    write_half_byte(byte % 16);
+}
+
+void write_size_t(size_t addr) {
+    for (size_t i = ((size_t) 1 << (SIZE_WIDTH - 8)); i > 0; i >>= 8) {
+        write_byte(addr / i);
+        addr %= i;
     }
 }
 
-std::string reg_to_str(int reg) {
+const char *reg_to_str(int reg) {
     switch (reg) {
         case REG_RAX:
             return "RAX";
@@ -87,12 +89,16 @@ void handler(int sig, siginfo_t *info, void *ucontext) {
     auto *context = static_cast<ucontext_t *>(ucontext);
     auto addr = reinterpret_cast<size_t>(info->si_addr);
 
-    write("Segmentation fault at " + get_hex(addr) + "\n");
-    write("Registers:\n");
+    write_str("Segmentation fault at ");
+    write_size_t(addr);
+    write_str("\nRegisters:\n");
     for (int i = 0; i < __NGREG; ++i) {
-        std::string reg = reg_to_str(i);
-        if (!reg.empty()) {
-            write(reg + " : 0x" + get_hex(context->uc_mcontext.gregs[i], true) + '\n');
+        const char *reg = reg_to_str(i);
+        if (strcmp(reg, "") != 0) {
+            write_str(reg);
+            write_str(" : 0x");
+            write_size_t(context->uc_mcontext.gregs[i]);
+            write_str("\n");
         }
     }
 
@@ -103,35 +109,40 @@ void handler(int sig, siginfo_t *info, void *ucontext) {
 
         int pipe_fd[2];
         if (pipe(pipe_fd) == -1) {
-            throw std::runtime_error("Can't dump memory");
+            write_str("\nCan't dump memory\n");
+            _exit(EXIT_FAILURE);
         }
 
         int j = 0;
-        write("\nMemory from " + get_hex(st) + " to " + get_hex(fin) + ":\n");
+        write_str("\nMemory from 0x");
+        write_size_t(st);
+        write_str(" to 0x");
+        write_size_t(fin);
+        write_str(":\n");
         for (auto p = reinterpret_cast<char *>(st); p != reinterpret_cast<char *>(fin); ++p) {
             if (p == info->si_addr) {
-                write("\033[31m");
+                write_str("\033[31m");
             }
 
             if (write(pipe_fd[1], p, 1) != -1) {
                 char tmp = *p;
-                auto s = get_hex(static_cast<uint>(static_cast<u_char>(tmp)));
-                write(s);
+                auto s = static_cast<uint8_t>(static_cast<u_char>(tmp));
+                write_byte(s);
             } else {
-                write("??");
+                write_str("??");
             }
 
             if (p == info->si_addr) {
-                write("\033[0m");
+                write_str("\033[0m");
             }
 
-            write(" ");
+            write_str(" ");
             if (++j % 8 == 0) {
-                write("\n");
+                write_str("\n");
             }
         }
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 int main(int argc, char **argv) {
