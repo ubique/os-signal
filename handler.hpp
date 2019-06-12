@@ -22,14 +22,6 @@ public:
 
     static void dump_memory(void *address);
 
-    struct handler_exception : public std::runtime_error {
-
-        handler_exception(std::string const &message, int error = 0) : std::runtime_error(message), error(error) {};
-
-        int error;
-
-    };
-
 private:
 
     static void handle(int signal, siginfo_t *siginfo, void *context);

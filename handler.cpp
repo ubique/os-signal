@@ -92,7 +92,8 @@ handler::handler() {
     action.sa_sigaction = &handle;
 
     if (sigaction(SIGSEGV, &action, nullptr) < 0) {
-        throw handler_exception("Could not set signal handler", errno);
+        console::report("Could not set signal handler", errno);
+        return;
     }
 }
 
@@ -150,7 +151,8 @@ void handler::dump_memory(void *address) {
     action.sa_sigaction = &handle_inner;
 
     if (sigaction(SIGSEGV, &action, nullptr) < 0) {
-        throw handler_exception("Could not set signal handler to inner handler", errno);
+        console::report("Could not set signal handler to inner handler", errno);
+        return;
     }
 
     char *from = mem > reinterpret_cast<char *>(32) ? mem - 32 : nullptr;
