@@ -9,30 +9,8 @@
 
 using namespace std;
 
-
-const map<string, int> registers = {{"R8",      REG_R8},
-                                    {"R9",      REG_R9},
-                                    {"R10",     REG_R10},
-                                    {"R11",     REG_R11},
-                                    {"R12",     REG_R12},
-                                    {"R13",     REG_R13},
-                                    {"R14",     REG_R14},
-                                    {"R15",     REG_R15},
-                                    {"RAX",     REG_RAX},
-                                    {"RBP",     REG_RBP},
-                                    {"RBX",     REG_RBX},
-                                    {"RCX",     REG_RCX},
-                                    {"RDI",     REG_RDI},
-                                    {"RDX",     REG_RDX},
-                                    {"RIP",     REG_RIP},
-                                    {"RSI",     REG_RSI},
-                                    {"RSP",     REG_RSP},
-                                    {"CR2",     REG_CR2},
-                                    {"EFL",     REG_EFL},
-                                    {"CSGSFS",  REG_CSGSFS},
-                                    {"ERR",     REG_ERR},
-                                    {"OLDMASK", REG_OLDMASK},
-                                    {"TRAPNO",  REG_TRAPNO}};
+char num_buffer[20];
+jmp_buf jmp;
 
 
 void check_error(int value, const char *message) {
@@ -59,7 +37,80 @@ void write_string(const char *s) {
     }
 }
 
-jmp_buf jmp;
+void write_int(int x) {
+    if (x < 0) {
+        write_string("-");
+        x *= -1;
+    }
+
+    int pos = 18;
+    if (x == 0) {
+        num_buffer[pos] = '0';
+        write_string(num_buffer + pos);
+        return;
+    }
+
+    while (x) {
+        num_buffer[pos--] = '0' + x % 10;
+        x /= 10;
+    }
+    write_string(num_buffer + pos + 1);
+
+}
+
+void write_sizet(size_t x) {
+    int pos = 18;
+    if (x == 0) {
+        num_buffer[pos] = '0';
+        write_string(num_buffer + pos);
+        return;
+    }
+
+    while (x) {
+        num_buffer[pos--] = '0' + x % 10;
+        x /= 10;
+    }
+    write_string(num_buffer + pos + 1);
+}
+
+
+
+void write_register(const char *reg, int num_reg, ucontext_t *ucontext) {
+    write_string(reg);
+    write_string(" = ");
+    int reg_int = static_cast<int>(ucontext->uc_mcontext.gregs[num_reg]);
+    write_int(reg_int);
+    write_string("\n");
+
+}
+
+void write_registers(ucontext_t *ucontext) {
+    write_register("R8",  REG_R8, ucontext);
+    write_register("R9",  REG_R9, ucontext);
+    write_register("R10", REG_R10, ucontext);
+    write_register("R11", REG_R11, ucontext);
+    write_register("R12", REG_R12, ucontext);
+    write_register("R13", REG_R13, ucontext);
+    write_register("R14", REG_R14, ucontext);
+    write_register("R15", REG_R15, ucontext);
+    write_register("RAX", REG_RAX, ucontext);
+    write_register("RBP", REG_RBP, ucontext);
+    write_register("RBX", REG_RBX, ucontext);
+    write_register("RCX", REG_RCX, ucontext);
+    write_register("RDI", REG_RDI, ucontext);
+    write_register("RDX", REG_RDX, ucontext);
+    write_register("RIP", REG_RIP, ucontext);
+    write_register("RSI", REG_RSI, ucontext);
+    write_register("RSP", REG_RSP, ucontext);
+    write_register("CR2", REG_CR2, ucontext);
+    write_register("EFL", REG_EFL, ucontext);
+    write_register("CSGSFS",  REG_CSGSFS,  ucontext);
+    write_register("ERR",     REG_ERR,     ucontext);
+    write_register("OLDMASK", REG_OLDMASK, ucontext);
+    write_register("TRAPNO",  REG_TRAPNO,  ucontext);
+}
+
+
 
 void sig_helper(int, siginfo_t *, void *) {
     siglongjmp(jmp, 1);
@@ -68,24 +119,16 @@ void sig_helper(int, siginfo_t *, void *) {
 void sigact_handler(int, siginfo_t *info, void *context) {
     auto *ucontext = reinterpret_cast<ucontext_t *>(context);
 
-
-    for (auto &reg :registers) {
-        write_string(reg.first.c_str());
-        write_string(" = ");
-        int reg_int = static_cast<int>(ucontext->uc_mcontext.gregs[reg.second]);
-        write_string(to_string(reg_int).c_str());
-        write_string("\n");
-    }
-
+    write_registers(ucontext);
 
     char *addr = (char *) info->si_addr;
 
     write_string("address = ");
-    write_string(to_string((size_t)addr).c_str());
+    write_sizet((size_t) addr);
     write_string("\n");
 
 
-    char *left  = addr < (char*)16 ? nullptr : addr - 16;
+    char *left = addr < (char *) 16 ? nullptr : addr - 16;
     char *right = addr > numeric_limits<char *>::max() - 16 ? numeric_limits<char *>::max() : addr + 16;
 
 
@@ -102,7 +145,7 @@ void sigact_handler(int, siginfo_t *info, void *context) {
     check_error(sigaction(SIGSEGV, &sa, nullptr), "sigaction");
 
 
-    for (char *i = left ; i <= right; i +=4) {
+    for (char *i = left; i <= right; i += 4) {
         if (setjmp(jmp) != 0) {
             write_string("???");
         } else {
@@ -124,5 +167,6 @@ int main() {
     sa.sa_sigaction = sigact_handler;
     check_error(sigaction(SIGSEGV, &sa, nullptr), "sigaction");
 
+
     return 0;
-}
+} 
