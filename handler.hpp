@@ -24,7 +24,7 @@ public:
 
     struct handler_exception : public std::runtime_error {
 
-        handler_exception(std::string const &message, int error = 0) : std::runtime_error(message), error(error) {};
+        handler_exception(char const *message, int error = 0) : std::runtime_error(message), error(error) {};
 
         int error;
 
