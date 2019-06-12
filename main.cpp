@@ -5,8 +5,9 @@
 #include <sys/ucontext.h>
 #include <cstring>
 #include <setjmp.h>
+#include <unistd.h>
 
-std::string regs[] = {
+char regs[23][10] = {
         "R8",
         "R9",
         "R10",
@@ -33,6 +34,50 @@ std::string regs[] = {
 };
 jmp_buf buf;
 
+void print(const char *str) {
+    write(STDERR_FILENO, str, strlen(str));
+}
+
+void println(const char *str) {
+    print(str);
+    print("\n");
+}
+
+void getHex(size_t val, char *res) {
+    size_t size = 16;
+    res[0] = '0';
+    res[1] = 'x';
+    res[2 + size] = '\0';
+    size_t i = size + 1;
+    while (i != 1 && val != 0) {
+        size_t digit = val % 16;
+        if (digit < 10) {
+            res[i] = '0' + digit;
+        } else {
+            res[i] = 'a' + (digit - 10);
+        }
+        val /= 16;
+        i--;
+    }
+}
+
+void printhex(size_t val) {
+    char v[32];
+    for (char &i : v) {
+        i = '0';
+    }
+    getHex(val, v);
+    print(v);
+}
+
+void printreg(const char *reg, size_t val) {
+    print(reg);
+    print("  ");
+    printhex(val);
+    println("");
+
+
+}
 
 void addrHandler(int sig, siginfo_t *info, void *ucontext) {
     siglongjmp(buf, 1);
@@ -40,37 +85,37 @@ void addrHandler(int sig, siginfo_t *info, void *ucontext) {
 
 void handler(int sig, siginfo_t *info, void *ucontext) {
     if (info->si_signo == SIGSEGV) {
-        std::cout << "SIGSEGV detected at " << info->si_addr << std::endl;
+        print("SIGSEGV caught");
         switch (info->si_code) {
             case SEGV_MAPERR: {
-                std::cout << "Address not mapped to object" << std::endl;
+                println("Address not mapped to object");
                 break;
             }
             case SEGV_ACCERR: {
-                std::cout << "Invalid permissions for mapped object" << std::endl;
+                println("Invalid permissions for mapped object");
                 break;
             }
             case SEGV_BNDERR: {
-                std::cout << "Failed address bound checks" << std::endl;
+                println("Failed address bound checks");
                 break;
             }
             case SEGV_PKUERR: {
-                std::cout << "Access was denied by memory protection keys" << std::endl;
+                println("Access was denied by memory protection keys");
                 break;
             }
             default: {
-                std::cout << "Something bad happened" << std::endl;
+                println("Something bad happened");
                 break;
             }
         }
         // registers
-        std::cout << "---REGISTERS---" << std::endl;
+        println("---REGISTERS---");
         auto context = ((ucontext_t *) ucontext)->uc_mcontext;
         for (int i = 0; i < NGREG; ++i) {
-            std::cout << regs[i] << "   " << "0x" << std::hex << context.gregs[i] << std::endl;
+            printreg(regs[i], context.gregs[i]);
         }
         // memory
-        std::cout << std::dec << "---MEMORY---" << std::endl;
+        println("---MEMORY---");
         auto memAddr = (size_t) info->si_addr;
         size_t start = 0;
         size_t end = SIZE_MAX;
@@ -81,7 +126,6 @@ void handler(int sig, siginfo_t *info, void *ucontext) {
         if (end - memAddr > range) {
             end = memAddr + range;
         }
-        std::cout << "from " << start << " to " << end << std::hex << std::endl;
         for (size_t i = start; i <= end; i += sizeof(char)) {
             sigset_t sigset;
             sigemptyset(&sigset);
@@ -91,16 +135,20 @@ void handler(int sig, siginfo_t *info, void *ucontext) {
             act.sa_flags = SA_SIGINFO;
             act.sa_sigaction = addrHandler;
             if (sigaction(SIGSEGV, &act, nullptr) < 0) {
-                std::cerr << "sigaction error" << strerror(errno) << std::endl;
+                print("sigaction error: ");
+                println(strerror(errno));
                 exit(EXIT_FAILURE);
             }
             if (setjmp(buf)) {
-                std::cout << "0x" << i << " " << "--";
+                printhex(i);
+                print(" --");
             } else {
                 auto data = ((const char *) i)[0];
-                std::cout << "0x" << i << " " << (uint32_t) data;
+                printhex(i);
+                print(" ");
+                printhex((uint32_t) data);
             }
-            std::cout << std::endl;
+            println("");
         }
 
     }
