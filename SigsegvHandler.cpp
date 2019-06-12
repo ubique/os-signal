@@ -11,6 +11,7 @@
 #include "SigsegvHandler.h"
 #include <map>
 #include <string.h>
+#include <zconf.h>
 
 jmp_buf jmp;
 
@@ -46,16 +47,43 @@ void SigsegvHandler::myHandle(int sig, siginfo_t *siginfo, void *ucontext) {
     }
 }
 
+void writeString(const char* s) {
+    write(STDOUT_FILENO, s, strlen(s));
+}
+
+void outSymbol(uint8_t k) {
+    char c;
+    if (k < 10) {
+        c = '0' + k;
+    } else {
+        c = 'a' + k - 10;
+    }
+    write(STDOUT_FILENO, &c, 1);
+}
+
+void outByte(uint8_t b) {
+    outSymbol(b/16);
+    outSymbol(b % 16);
+}
+
+void writeNum(uint64_t num) {
+    for (int i = 7; i >= 0; i--) {
+        outByte((num >> (i*8)) & 0xff);
+    }
+}
+
 void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
     if (siginfo->si_signo == SIGSEGV) {
-        std::cout << strsignal(s) << " on " << siginfo->si_addr << std::endl;
-        std::cout << "___REGISTERS___" << std::endl;
+        writeString(strsignal(s));
+        writeString("\n___REGISTERS___\n");
         ucontext_t *ucontext = (ucontext_t *) context;
         for (auto &reg: registers) {
-            std::cout << reg.first << " = " << ucontext->uc_mcontext.gregs[reg.second] << std::endl;
+            writeString(reg.first.data());
+            writeString(" = ");
+            writeNum(ucontext->uc_mcontext.gregs[reg.second]);
+            writeString("\n");
         }
-
-        std::cout << "___MEMORY___" << std::endl;
+        writeString("___MEMORY___");
         char *addr = (char *) siginfo->si_addr;
         char *maxc = std::numeric_limits<char *>::max();
         char *left, *right;
@@ -79,18 +107,18 @@ void SigsegvHandler::handle(int s, siginfo_t *siginfo, void *context) {
                 perror("Cannot change signal action");
                 exit(EXIT_FAILURE);
             }
-            if (setjmp(jmp)) {
-                std::cout << "can't read memory" << std::endl;
-            } else {
-                if (i == addr) {
-                    std::cout << "[";
-                }
-                std::cout << (int) *i;
-                if (i == addr) {
-                    std::cout << "]";
-                }
-                std::cout << std::endl;
+            if (i == addr) {
+                writeString("[");
             }
+            if (setjmp(jmp)) {
+                writeString("can't read memory");
+            } else {
+                writeNum((uint64_t) *i);
+            }
+            if (i == addr) {
+                writeString("]");
+            }
+            writeString("\n");
         }
         exit(EXIT_FAILURE);
     }
