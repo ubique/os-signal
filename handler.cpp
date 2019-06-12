@@ -1,39 +1,84 @@
 #include "handler.hpp"
 
-#include <iostream>
-#include <iomanip>
 #include <cstring>
-
-#include <signal.h>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
 #include <limits>
 
+#include <signal.h>
+#include <unistd.h>
+
 namespace console {
 
-    std::string _ERROR = "\033[31;1m";
-    std::string _HELP = "\033[32;1m";
-    std::string _DEFAULT = "\033[0m";
-    std::string _BOLD = "\033[1m";
-    std::string _INFO = "\033[34;1m";
+    const char *_ERROR = "\033[31;1m";
+    const char *_HELP = "\033[32;1m";
+    const char *_DEFAULT = "\033[0m";
+    const char *_BOLD = "\033[1m";
+    const char *_INFO = "\033[34;1m";
 
     // @formatter:off
-    std::string USAGE = "SIGSEGV handler + regdump v.1.0.0\n"
+    const char *USAGE = "SIGSEGV handler + regdump v.1.0.0\n"
                         "Usage: ./segfault (no arguments)";
     // @formatter:on
 
-    int report(std::string const &message, int err = 0) {
-        std::cerr << _ERROR << message;
-        if (err != 0) {
-            std::cerr << std::strerror(errno);
+    class async_signal_safe_printer {
+
+        unsigned int _set_length;
+
+    public:
+
+        async_signal_safe_printer() = default;
+
+        async_signal_safe_printer(async_signal_safe_printer const &other) : _set_length(other._set_length) {};
+
+        async_signal_safe_printer &operator<<(char flag) {
+            _set_length = static_cast<unsigned int>(flag > 'a' ? 10 + flag - 'a' : flag - '0');
+            return *this;
         }
-        std::cerr << std::endl << _DEFAULT;
+
+        async_signal_safe_printer &operator<<(char const *message) {
+            if (_set_length == 0) {
+                ::write(1, message, strlen(message));
+            } else {
+                char buf[_set_length + 1];
+                unsigned int n = static_cast<unsigned int>(strlen(message));
+                for (unsigned int i = 0; i < _set_length; i++) {
+                    buf[i] = i < n ? message[i] : ' ';
+                }
+                ::write(1, buf, _set_length);
+            }
+            return *this;
+        }
+
+        async_signal_safe_printer &operator<<(size_t hex) {
+            char buf[_set_length + 1];
+            for (unsigned int i = 0; i < _set_length; i++) {
+                unsigned int mod = static_cast<unsigned int>(hex % 16);
+                buf[_set_length - i - 1] = static_cast<char>(mod > 9 ? 'a' + (mod - 10) : '0' + mod);
+                hex /= 16;
+            }
+            ::write(1, buf, _set_length);
+            return *this;
+        }
+
+    };
+
+    async_signal_safe_printer out() {
+        return async_signal_safe_printer();
+    }
+
+    int report(char const *message, int err = 0) {
+        out() << _ERROR << message;
+        if (err != 0) {
+            out() << strerror(errno);
+        }
+        out() << "\n" << _DEFAULT;
         return 0;
     }
 
-    void notify(std::string const &message) {
-        std::cout << _INFO << message << std::endl << _DEFAULT;
+    void notify(char const *message) {
+        out() << _INFO << message << "\n" << _DEFAULT;
     }
 
 }
@@ -64,7 +109,7 @@ void handler::cause_segfault() {
 }
 
 void handler::dump_registers(ucontext_t *ucontext) {
-    static std::vector<std::pair<std::string, int>> registers{
+    static std::vector<std::pair<const char *, int>> registers{
             {"R8",      REG_R8},
             {"R9",      REG_R9},
             {"R10",     REG_R10},
@@ -92,11 +137,9 @@ void handler::dump_registers(ucontext_t *ucontext) {
 
     console::notify("REGISTERS");
     for (auto const &pair : registers) {
-        std::cout << std::setw(8) << std::setfill(' ') << std::left << pair.first;
-        std::cout << ": " << std::setw(16) << std::setfill('0') << std::hex <<
-                  ucontext->uc_mcontext.gregs[pair.second] << std::endl;
+        console::out() << '8' << pair.first << ": " << 'g' <<
+                       static_cast<size_t>(ucontext->uc_mcontext.gregs[pair.second]) << '0' << "\n";
     }
-    std::cout << std::endl;
 }
 
 void handler::dump_memory(void *address) {
@@ -115,24 +158,23 @@ void handler::dump_memory(void *address) {
     char *to = mem < std::numeric_limits<char *>::max() - 32 ? mem + 32 : std::numeric_limits<char *>::max();
     console::notify("MEMORY");
 
-    std::cout << console::_ERROR << "FROM " << std::setw(16) << std::setfill('0') << reinterpret_cast<size_t>(from)
-              << " TO " << std::setw(16) << std::setfill('0') << reinterpret_cast<size_t>(to)
-              << console::_DEFAULT << std::endl;
+    console::out() << console::_ERROR << "FROM " << 'g' << reinterpret_cast<size_t>(from) << '0' << " TO "
+                   << 'g' << reinterpret_cast<size_t>(to) << '0' << console::_DEFAULT << "\n";
 
     for (char *cell = from; cell <= to; cell++) {
         if (cell == mem) {
-            std::cout << "[-> ";
+            console::out() << "[-> ";
         }
         if (setjmp(jmp) < 0) {
-            std::cout << "-- ";
+            console::out() << "-- ";
         } else {
-            std::cout << std::setw(2) << std::setfill('0') << (*cell & 0xFFu) << ' ';
+            console::out() << '2' << static_cast<size_t>(*cell & 0xFFu) << '0' << " ";
         }
         if (cell == mem) {
-            std::cout << "<-] ";
+            console::out() << "<-] ";
         }
     }
-    std::cout << std::endl;
+    console::out() << "\n";
 }
 
 void handler::handle(int signal, siginfo_t *siginfo, void *context) {
