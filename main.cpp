@@ -26,7 +26,7 @@ std::string to_hex(size_t value) {
 }
 
 void write_to_stderr(const char* pointer, size_t len) {
-    size_t result;
+    ssize_t result;
     while (len && (result = write(STDERR_FILENO, pointer, len))) {
         if (result < 0 && errno == EINTR) {
             continue;
@@ -43,7 +43,7 @@ void write_to_stderr(std::string const& pointer) {
     write_to_stderr(pointer.c_str(), pointer.size());
 }
 
-std::string get_register_name(int reg) {
+std::string get_register_name(size_t reg) {
     switch (reg) {
     case REG_R8:
         return "R8";
@@ -96,6 +96,10 @@ std::string get_register_name(int reg) {
     }
 }
 
+void print_error(std::string const& message) {
+    write_to_stderr(message + ": " + std::strerror(errno) + "\n");
+}
+
 
 void sig_handler(int sig, siginfo_t* info, void* ucontext) {
     write_to_stderr("Segmentation fault at " + to_hex((size_t)info->si_addr) + "\n");
@@ -123,20 +127,30 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
             finish = (size_t)info->si_addr + 64;
         }
         write_to_stderr("Memory dump:\n");
-        int fd = open("/dev/random", O_WRONLY);
+        int fd[2];
+        if (pipe(fd) < 0) {
+            print_error("Pipe failed");
+            exit(EXIT_FAILURE);
+        }
         size_t j = 0;
         for(char* pos = (char*)start; pos != (char*)finish; pos++, j++) {
             if (j % 8 == 0) {
                  write_to_stderr(std::to_string((ptrdiff_t)pos - (ptrdiff_t)info->si_addr) + ":\t");
             }
             std::string data = "????";
-            if (write(fd, pos, 1) >= 0) {
+            if (write(fd[1], pos, 1) >= 0) {
                data = to_hex((size_t)(*pos) & 0xff);
             }
             write_to_stderr(data + " ");
             if (j % 8 == 7) {
                 write_to_stderr("\n");
             }
+        }
+        if (close(fd[0]) < 0) {
+            print_error("Can't close pipe");
+        }
+        if (close(fd[1]) < 0) {
+            print_error("Can't close pipe");
         }
     }
     exit(EXIT_FAILURE);
