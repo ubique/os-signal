@@ -1,7 +1,6 @@
 #ifndef SIGSEGV_HANDLER_HPP_
 #define SIGSEGV_HANDLER_HPP_
 
-#include <csetjmp>
 #include <csignal>
 
 struct sigsegv_handler {
@@ -11,6 +10,9 @@ private:
     sigsegv_handler();
 
     static void handle(int, siginfo_t * siginf, void * context);
+    static void dump_registers(void * context);
+    static void dump_memory(siginfo_t * siginf);
+
     static void try_create_pipe(int * pipefd);
 };
 

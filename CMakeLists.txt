@@ -8,4 +8,4 @@ add_executable(sigsegv
                main.cpp
                sigsegv_handler.cpp
                sigsegv_handler.hpp
-               context.hpp)
+               writer.hpp)
