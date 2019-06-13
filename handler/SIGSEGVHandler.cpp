@@ -3,43 +3,48 @@
 //
 
 #include "SIGSEGVHandler.h"
+#include "../Output.h"
 
-
-jmp_buf SIGSEGVHandler::buf;
 size_t SIGSEGVHandler::memoryDumpRange = 15;
 
 void SIGSEGVHandler::dumpGeneralRegisters() {
-    TableDouble regDump("General registers", "Register", "Value");
-    std::vector<std::string> regSuffixes = {
-            "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
-            "RDI", "RSI",
-            "RBP",
-            "RBX", "RDX", "RAX", "RCX",
-            "RSP", "RIP",
-            "EFL",
-            "CSGSFS", "ERR", "TRAPNO", "OLDMASK",
-            "CR2"
-    };
-    for (greg_t currentRegister = REG_R8; currentRegister != NGREG; currentRegister++) {
-
-        regDump.addValue(regSuffixes[currentRegister],
-                         (((ucontext_t*) context)->uc_mcontext.gregs[currentRegister]));
-    }
-    regDump.print(std::cerr);
+    output.putString("General registers").newLine();
+    dumpReg("R8", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R8]));
+    dumpReg("R9", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R9]));
+    dumpReg("R10", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R10]));
+    dumpReg("R11", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R11]));
+    dumpReg("R12", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R12]));
+    dumpReg("R13", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R13]));
+    dumpReg("R14", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R14]));
+    dumpReg("R15", (((ucontext_t*) context)->uc_mcontext.gregs[REG_R15]));
+    dumpReg("RDI", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RDI]));
+    dumpReg("RSI", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RSI]));
+    dumpReg("RBP", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RBP]));
+    dumpReg("RBX", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RBX]));
+    dumpReg("RDX", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RDX]));
+    dumpReg("RAX", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RAX]));
+    dumpReg("RCX", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RCX]));
+    dumpReg("RSP", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RSP]));
+    dumpReg("RIP", (((ucontext_t*) context)->uc_mcontext.gregs[REG_RIP]));
+    dumpReg("EFL", (((ucontext_t*) context)->uc_mcontext.gregs[REG_EFL]));
+    dumpReg("CSGSFS", (((ucontext_t*) context)->uc_mcontext.gregs[REG_CSGSFS]));
+    dumpReg("ERR", (((ucontext_t*) context)->uc_mcontext.gregs[REG_ERR]));
+    dumpReg("TRAPNO", (((ucontext_t*) context)->uc_mcontext.gregs[REG_TRAPNO]));
+    dumpReg("OLDMASK", (((ucontext_t*) context)->uc_mcontext.gregs[REG_OLDMASK]));
+    dumpReg("CR2", (((ucontext_t*) context)->uc_mcontext.gregs[REG_CR2]));
+    output.newLine(2);
 }
 
 void SIGSEGVHandler::showCode() {
-    std::cerr << "Caused by: ";
+    output.putString("Caused by: ");
     switch (siginfo->si_code) {
         case SEGV_MAPERR:
-            std::cerr << "Address doesn't map to object\n";
+            output.putString("Address doesn't map to object").newLine(3);
             return;
         case SEGV_ACCERR:
-            std::cerr << "Invalid permissions for mapped object\n";
+            output.putString("Invalid permissions for mapped object").newLine(3);
             return;
     }
-    std::cerr << "???\nUnsupported code: " << siginfo->si_code << std::endl;
-
 }
 
 void SIGSEGVHandler::catchSignal(int signum, siginfo_t* siginfo, void* context) {
@@ -54,10 +59,15 @@ void SIGSEGVHandler::catchSignal(int signum, siginfo_t* siginfo, void* context) 
 }
 
 SIGSEGVHandler::SIGSEGVHandler(int signum, siginfo_t* siginfo, void* context) : signum(signum), siginfo(siginfo),
-                                                                                context(context) {
 
-    std::cerr << "Handle SIGSEGV signal\n"
-                 "Access to " << static_cast<void*>(siginfo->si_addr) << std::endl;
+                                                                                context(context) {
+    output = Output();
+    output.putString("Handle SIGSEGV signal")
+            .newLine()
+            .putString("Access to ")
+            .putHex((unsigned long int) static_cast<void*>(siginfo->si_addr))
+            .newLine(2);
+
 }
 
 bool SIGSEGVHandler::attachFunction(void (* pFunction)(int, siginfo_t*, void*)) {
@@ -72,45 +82,57 @@ bool SIGSEGVHandler::attachFunction(void (* pFunction)(int, siginfo_t*, void*)) 
     return true;
 }
 
-void SIGSEGVHandler::jump(int signum, siginfo_t* siginfo, void* context) {
-    __ifInvalidAccess {
-        siglongjmp(buf, 1);
+
+void SIGSEGVHandler::dumpMemory(int range) {
+    output.putString("Memory dump").newLine();
+    int pipeArray[2];
+    auto status = pipe(pipeArray);
+    if (status == -1) {
+        output.putString("Cannot create pipe for dump memory").newLine();
+        return;
     }
-}
+    size_t inBlock = 5;
+    size_t count = 0;
+    for (int current = -range; current <= range; current++) {
+        char* addr = static_cast<char*>(siginfo->si_addr) + current;
+        auto validAddr = write(pipeArray[1], addr, 1);
+        if (validAddr != -1) {
+            output.putHex((unsigned long int) addr).ws();
+            byte value;
+            auto dumpStatus = read(pipeArray[0], &value, 1);
+            if (dumpStatus == -1) {
+                output.putString("NDEF");
+            } else {
+                output.putByte(value);
+                if(current == 0){
+                    output.putString("[!!]");
+                } else {
+                    output.ws(4);
+                }
+                output.ws(2);
+            }
 
-void SIGSEGVHandler::dumpMemory(size_t range) {
-    auto address = (long long) ((byte*) siginfo->si_addr);
-    auto step = sizeof(byte);
-    TableDouble tableDouble("Memory (range " + std::to_string(range) + ")", "Address", "Value");
-    long long to = LONG_LONG_MAX - range * step > address ? (address + range * step) : LONG_LONG_MAX;
-
-    for (auto addr = std::max(0ll, (long long) (address - range * step));
-         addr <= to; addr += step) {
-        sigset_t signalSet;
-        sigemptyset(&signalSet);
-        sigaddset(&signalSet, SIGSEGV);
-        sigprocmask(SIG_UNBLOCK, &signalSet, nullptr);
-
-        if (!attachFunction(SIGSEGVHandler::jump)) {
-            return;
-        }
-
-        auto markAddr = addr == address ? "SIGSEGV " : "";
-
-        std::stringstream value;
-
-        if (setjmp(buf) != 0) {
-            value << "cannot be dumped";
         } else {
-            value << std::hex << static_cast<unsigned int>(reinterpret_cast<const byte*>(addr)[0]);
+            output.putString("  ER  ");
         }
-        tableDouble.addValue(reinterpret_cast<void*>(addr), value.str(), markAddr);
+        count++;
+        output.ws();
+        if(count % inBlock == 0){
+            count = 0;
+            output.newLine();
+        }
 
     }
-    tableDouble.print(std::cerr);
+
+    output.newLine(2);
 }
 
 bool SIGSEGVHandler::attach(const size_t dumpRange) {
     memoryDumpRange = dumpRange;
     return attachFunction(SIGSEGVHandler::catchSignal);
+}
+
+void SIGSEGVHandler::dumpReg(const char* name, unsigned long int value, bool newBlock) {
+    size_t blockSize = 10;
+    output.putString(name).ws(blockSize - strlen(name)).putHex(value).newLine(newBlock ? 2 : 1);
 }

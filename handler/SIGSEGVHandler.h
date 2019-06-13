@@ -15,38 +15,40 @@
 #include <sys/ucontext.h>
 #include <csetjmp>
 #include <iostream>
-#include "../table/TableDouble.h"
+#include "../Output.h"
 
 class SIGSEGVHandler {
 
 private:
-
-    using byte = char;
+    Output output;
+    using byte = uint8_t;
 #define __ifInvalidAccess if (siginfo->si_signo == SIGSEGV)
 
     int signum;
     siginfo_t* siginfo;
     void* context;
 
-    static jmp_buf buf;
+    SIGSEGVHandler(int, siginfo_t*, void*);
 
-    SIGSEGVHandler(int signum, siginfo_t* siginfo, void* context);
+    static bool attachFunction(void (*)(int, siginfo_t*, void*));
 
-    static void jump(int signum, siginfo_t* siginfo, void* context);
-    static bool attachFunction(void (* pFunction)(int, siginfo_t*, void*));
-    static void catchSignal(int signum, siginfo_t* siginfo, void* context);
+    static void catchSignal(int, siginfo_t*, void*);
 
 
     void showCode();
+
     void dumpGeneralRegisters();
-    void dumpMemory(size_t range);
+
+    void dumpMemory(int);
+
+    void dumpReg(const char*, unsigned long int, bool = false);
 
 
 public:
 
     static size_t memoryDumpRange;
 
-    static bool attach(const size_t dumpRange = 15);
+    static bool attach(size_t = 15);
 
 };
 

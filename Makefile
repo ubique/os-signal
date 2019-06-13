@@ -7,7 +7,7 @@ OUTPUT=output
 all:
 	@rm -rf ${OUTPUT}
 	@mkdir ${OUTPUT}
-	@${CXX} main.cpp handler/*.cpp table/*.cpp -o ${OUTPUT}/${NAME}
+	@${CXX} *.cpp handler/*.cpp -o ${OUTPUT}/${NAME}
 
 clean:
 	@rm -rf ${OUTPUT}
