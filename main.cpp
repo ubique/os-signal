@@ -1,10 +1,10 @@
 #include <iostream>
+#include <cstring>
 
 #include "SignalHandler.h"
 
 void printErr(const std::string& message) {
     fprintf(stderr, "ERROR %s: %s\n", message.c_str(), strerror(errno));
-
 }
 
 void testNull() {

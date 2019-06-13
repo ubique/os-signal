@@ -1,33 +1,28 @@
 #ifndef OS_SIGNAL_SIGNALHANDLER_H
 #define OS_SIGNAL_SIGNALHANDLER_H
 
-#include <iostream>
-#include <map>
-#include <sys/ucontext.h>
-#include <cstring>
+#include <vector>
 #include <signal.h>
-#include <climits>
-#include <csetjmp>
 
 
-class SignalHandler {
+struct SignalHandler {
 public:
     static void handler(int signo, siginfo_t* siginfo, void* context);
 
 private:
-    static void printErr(const std::string& message);
+    SignalHandler() = default;
 
-    static void helper(int sig, siginfo_t* info, void* context);
+    static void printErr(const char* message);
 
-    static void dumpAddress(long long address);
+    static void dumpAddress(int pip[], char* address,int i);
 
-    static void dumpMemory(void* address);
+    static void dumpMemory(char* address);
 
     static void dumpRegisters(ucontext_t* ucontext);
 
-    static const std::map<std::string, int> REGISTERS;
+    static const std::vector<std::pair<const char*, int>> REGISTERS;
 
-    static const int MEMORY_RANGE = 20;
+    static const int MEMORY_RANGE = 16;
 };
 
 

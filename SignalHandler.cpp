@@ -1,6 +1,16 @@
-#include "SignalHandler.h"
+#include <unistd.h>
+#include <cstring>
+#include <climits>
+#include <csetjmp>
+#include <sys/ucontext.h>
+#include <cstdlib>
 
-const std::map<std::string, int> SignalHandler::REGISTERS = {
+#include "SignalHandler.h"
+#include "SafeWriter.hpp"
+
+using namespace SafeWriter;
+
+const std::vector<std::pair<const char*, int>> SignalHandler::REGISTERS = {
         {"R8",      REG_R8},
         {"R9",      REG_R9},
         {"R10",     REG_R10},
@@ -26,87 +36,89 @@ const std::map<std::string, int> SignalHandler::REGISTERS = {
         {"OLDMASK", REG_OLDMASK},
 };
 
-static jmp_buf jmpBuf;
 
-void SignalHandler::printErr(const std::string& message) {
-    fprintf(stderr, "ERROR %s: %s\n", message.c_str(), strerror(errno));
-
+void SignalHandler::printErr(const char* message) {
+    safeWrite(message);
 }
 
-void SignalHandler::helper(int sig, siginfo_t* info, void* context) {
-    if (info->si_signo == SIGSEGV) {
-        siglongjmp(jmpBuf, 1);
-    }
-}
 
-void SignalHandler::dumpAddress(long long address) {
-    sigset_t sigset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGSEGV);
-    sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
+void SignalHandler::dumpAddress(int pip[], char* address, int i) {
+    safeWrite(" ");
+    uint8_t value;
+    char* cur = address + i;
 
-    struct sigaction action{};
-    action.sa_sigaction = helper;
-    action.sa_flags = SA_SIGINFO;
-
-    if (sigaction(SIGSEGV, &action, nullptr) < 0) {
-        printErr("Signal action failed");
-        exit(EXIT_FAILURE);
+    if (cur == address) {
+        safeWrite("> ");
     }
 
-    if (setjmp(jmpBuf) != 0) {
-        std::cout << " Unable to dump\n";
+    if (write(pip[1], cur, 1) < 0 || read(pip[0], &value, 1) < 0) {
+        safeWrite("Unknown");
     } else {
-        std::cout << " " << std::hex << +*reinterpret_cast<char*>(address) << "\n";
+        safeWrite(value);
     }
+
+    safeWrite("\n");
 }
 
-void SignalHandler::dumpMemory(void* address) {
-    std::cout << "\nMemory nearby: " << "\n";
-    if (address == nullptr) {
-        std::cout << " NULL\n";
-        exit(EXIT_FAILURE);
+void SignalHandler::dumpMemory(char* address) {
+    int pip[2];
+    if (pipe(pip) < 0) {
+        printErr("Unable to pipe");
+        _exit(EXIT_FAILURE);
     }
 
-    const size_t size = sizeof(char);
-    const long long from = std::max(0LL, (long long) ((char*) address - MEMORY_RANGE * size));
-    const long long to = std::min(LONG_LONG_MAX, (long long) ((char*) address + MEMORY_RANGE * size));
+    safeWrite("\nMemory nearby:\n");
+    if (address == nullptr) {
+        safeWrite(" NULL\n");
+        _exit(EXIT_FAILURE);
+    }
 
-    for (long long i = from; i < to; i += size) {
-        dumpAddress(i);
+    for (int i = -MEMORY_RANGE; i <= MEMORY_RANGE; ++i) {
+        dumpAddress(pip, address, i);
     }
 }
 
 void SignalHandler::dumpRegisters(ucontext_t* ucontext) {
-    std::cout << "\nGeneral purposes registers:\n";
+    safeWrite("\nGeneral purposes registers:\n");
     greg_t* gregs = ucontext->uc_mcontext.gregs;
 
     for (const auto& reg : REGISTERS) {
-        std::cout << " " << reg.first << ": " << gregs[reg.second] << "\n";
+        safeWrite(" ");
+        safeWrite(reg.first);
+        safeWrite(": ");
+        safeWrite(gregs[reg.second]);
+        safeWrite("\n");
     }
 }
 
 void SignalHandler::handler(int signo, siginfo_t* siginfo, void* context) {
     if (siginfo->si_signo == SIGSEGV) {
-        std::cout << "Signal aborted: " << strsignal(signo) << "\n";
+        safeWrite("Signal aborted: ");
+        safeWrite(strsignal(signo));
+        safeWrite("\n");
+
         switch (siginfo->si_code) {
             case SEGV_MAPERR: {
-                std::cout << "\nCause: Address is not mapped to object" << "\n";
+                safeWrite("\nCause: Address is not mapped to object\n");
                 break;
             }
             case SEGV_ACCERR: {
-                std::cout << "\nCause: Invalid permission" << "\n";
+                safeWrite("\nCause: Invalid permission\n");
                 break;
             }
             default:
-                std::cout << "\nCause: Something bad happen" << "\n";
+                safeWrite("\nCause: Something bad happen\n");
         }
 
         auto address = reinterpret_cast<intptr_t>(siginfo->si_addr);
-        std::cout << "Address: " << std::hex << address << "\n";
+
+        safeWrite("Address: ");
+        safeWrite(address);
+        safeWrite("\n");
 
         dumpRegisters(reinterpret_cast<ucontext_t*> (context));
-        dumpMemory(siginfo->si_addr);
+        dumpMemory(static_cast<char*>(siginfo->si_addr));
+        _exit(EXIT_SUCCESS);
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }

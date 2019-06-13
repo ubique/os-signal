@@ -3,4 +3,4 @@ project(os_signal)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(os_signal main.cpp SignalHandler.cpp SignalHandler.h)
+add_executable(os_signal main.cpp SignalHandler.cpp SignalHandler.h SafeWriter.hpp)
