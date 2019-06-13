@@ -4,7 +4,6 @@
 #include <signal.h>
 #include <sys/ucontext.h>
 #include <cstring>
-#include <setjmp.h>
 #include <unistd.h>
 
 char regs[23][10] = {
@@ -32,7 +31,6 @@ char regs[23][10] = {
         "OLDMASK",
         "CR2"
 };
-jmp_buf buf;
 
 void print(const char *str) {
     write(STDERR_FILENO, str, strlen(str));
@@ -43,13 +41,10 @@ void println(const char *str) {
     print("\n");
 }
 
-void getHex(size_t val, char *res) {
-    size_t size = 16;
-    res[0] = '0';
-    res[1] = 'x';
-    res[2 + size] = '\0';
-    size_t i = size + 1;
-    while (i != 1 && val != 0) {
+void getHex(size_t val, char *res, size_t size) {
+    res[size] = '\0';
+    size_t i = size - 1;
+    while (i != -1 && val != 0) {
         size_t digit = val % 16;
         if (digit < 10) {
             res[i] = '0' + digit;
@@ -61,26 +56,21 @@ void getHex(size_t val, char *res) {
     }
 }
 
-void printhex(size_t val) {
+void printhex(size_t val, size_t size) {
     char v[32];
     for (char &i : v) {
         i = '0';
     }
-    getHex(val, v);
+    getHex(val, v, size);
     print(v);
 }
 
 void printreg(const char *reg, size_t val) {
     print(reg);
     print("  ");
-    printhex(val);
+    print("0x");
+    printhex(val, 16);
     println("");
-
-
-}
-
-void addrHandler(int sig, siginfo_t *info, void *ucontext) {
-    siglongjmp(buf, 1);
 }
 
 void handler(int sig, siginfo_t *info, void *ucontext) {
@@ -116,6 +106,11 @@ void handler(int sig, siginfo_t *info, void *ucontext) {
         }
         // memory
         println("---MEMORY---");
+        int p[2];
+        if (pipe(p) == -1) {
+            println("creating pipe error");
+            exit(EXIT_FAILURE);
+        }
         auto memAddr = (size_t) info->si_addr;
         size_t start = 0;
         size_t end = SIZE_MAX;
@@ -127,26 +122,18 @@ void handler(int sig, siginfo_t *info, void *ucontext) {
             end = memAddr + range;
         }
         for (size_t i = start; i <= end; i += sizeof(char)) {
-            sigset_t sigset;
-            sigemptyset(&sigset);
-            sigaddset(&sigset, SIGSEGV);
-            sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
-            struct sigaction act{};
-            act.sa_flags = SA_SIGINFO;
-            act.sa_sigaction = addrHandler;
-            if (sigaction(SIGSEGV, &act, nullptr) < 0) {
-                print("sigaction error: ");
-                println(strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-            if (setjmp(buf)) {
-                printhex(i);
-                print(" --");
+            print("addr: 0x");
+            printhex(i, 16);
+            print("  data: ");
+            if (write(p[1], (char *) i, 1) == -1) {
+                print("--");
             } else {
-                auto data = ((const char *) i)[0];
-                printhex(i);
-                print(" ");
-                printhex((uint32_t) data);
+                uint32_t data;
+                if (read(p[0], &data, 1) == -1) {
+                    print("--");
+                } else {
+                    printhex(data, 2);
+                }
             }
             println("");
         }
