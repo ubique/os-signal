@@ -4,17 +4,15 @@
 #include "sigsegv_handler.hpp"
 
 void test_nullptr() {
-    int * p = nullptr;
+    int* p = nullptr;
     *p = 100500;
 }
 
-void test_raise() {
-    std::raise(SIGSEGV);
-}
+void test_raise() { std::raise(SIGSEGV); }
 
 void test_buf() {
     char buf[2];
-    for (auto ptr = buf; ; ++ptr) {
+    for (auto ptr = buf;; ++ptr) {
         *ptr += 'F';
     }
 }

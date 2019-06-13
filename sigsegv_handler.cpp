@@ -1,17 +1,15 @@
-#include <iostream>
-#include <limits>
 #include <unistd.h>
+#include <iostream>
 
 #include "sigsegv_handler.hpp"
 #include "writer.hpp"
 
-sigsegv_handler::sigsegv_handler()
-{
+sigsegv_handler::sigsegv_handler() {
     // static class
 }
 
 int sigsegv_handler::get_ready() {
-    struct sigaction sa; // mask of signals which should be blocked
+    struct sigaction sa;  // mask of signals which should be blocked
     sa.sa_flags = SA_SIGINFO | SA_NODEFER;
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = &handle;
@@ -22,16 +20,15 @@ int sigsegv_handler::get_ready() {
     return 0;
 }
 
-void sigsegv_handler::handle(int, siginfo_t * siginf, void * context)
-{
+void sigsegv_handler::handle(int, siginfo_t *siginf, void *context) {
     write_string("! SIGSEGV happened !\n");
     dump_registers(context);
     dump_memory(siginf);
     _exit(EXIT_FAILURE);
 }
 
-void sigsegv_handler::dump_registers(void * context) {
-    ucontext_t * p = (ucontext_t *)context;
+void sigsegv_handler::dump_registers(void *context) {
+    ucontext_t *p = (ucontext_t *)context;
     write_string("=== REG ===\n");
     write_register("R8", p->uc_mcontext.gregs[REG_R8]);
     write_register("R9", p->uc_mcontext.gregs[REG_R9]);
@@ -58,7 +55,7 @@ void sigsegv_handler::dump_registers(void * context) {
     write_register("CR2", p->uc_mcontext.gregs[REG_CR2]);
 }
 
-void sigsegv_handler::dump_memory(siginfo_t * siginf) {
+void sigsegv_handler::dump_memory(siginfo_t *siginf) {
     write_string("=== MEM ===\n");
     int pipefd[2];
     try_create_pipe(pipefd);
@@ -87,8 +84,7 @@ void sigsegv_handler::dump_memory(siginfo_t * siginf) {
     write_string("\n");
 }
 
-void sigsegv_handler::try_create_pipe(int * pipefd)
-{
+void sigsegv_handler::try_create_pipe(int *pipefd) {
     const auto pipest = pipe(pipefd);
     if (pipest == -1) {
         write_string("Can't pipe\n");
