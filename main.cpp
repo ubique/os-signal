@@ -80,7 +80,6 @@ void my_printer(int signal, siginfo_t *info, void *ucontext) {
 }
 
 int main() {
-    cout << "Program started" << endl;
     sigsegv.sa_sigaction = &my_printer;
     sigsegv.sa_flags = SA_SIGINFO | SA_NODEFER;
     if (sigaction(SIGSEGV, &sigsegv, NULL) < 0) {
@@ -88,6 +87,6 @@ int main() {
         return 1;
     }
     char *p = NULL;
-    cout << *p << endl;
+    printf("%c\n",*p);
     return 0;
 }
