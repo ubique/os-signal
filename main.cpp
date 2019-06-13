@@ -134,7 +134,7 @@ void handler_sigsegv(int sig_num, siginfo_t *sig_info, void *context) {
     }
     registers_dump((ucontext_t *) context);
     mem_dump(sig_info->si_addr);
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 
