@@ -68,13 +68,13 @@ namespace console {
         return async_signal_safe_printer();
     }
 
-    int report(char const *message, int err = 0) {
+    void report(char const *message, int err = 0) {
         out() << _ERROR << message;
         if (err != 0) {
             out() << strerror(errno);
         }
         out() << "\n" << _DEFAULT;
-        return 0;
+        exit(EXIT_FAILURE);
     }
 
     void notify(char const *message) {
@@ -182,7 +182,7 @@ void handler::handle(int signal, siginfo_t *siginfo, void *context) {
     if (siginfo->si_signo == SIGSEGV) {
         dump_registers(reinterpret_cast<ucontext_t *>(context));
         dump_memory(siginfo->si_addr);
-        exit(-1);
+        exit(EXIT_SUCCESS);
     }
 }
 
