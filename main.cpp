@@ -77,7 +77,7 @@ static void handler(int sig, siginfo_t *info, void *ucontext) {
     if (pipe(pipefd) == -1) {
         print_er("Pipe error");
         print_er("Cannot dump memory");
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
     cout << "Memory dump:" << endl;
     auto adr = (size_t) info->si_addr;
@@ -109,7 +109,7 @@ static void handler(int sig, siginfo_t *info, void *ucontext) {
             write(STDOUT_FILENO, "\n", 1);
         }
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 
 }
 
