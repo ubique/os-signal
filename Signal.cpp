@@ -92,7 +92,7 @@ void dumpMem(void* address)
         if (sigaction(SIGSEGV, &sAction, nullptr) == -1)
         {
             print("Error occurred during sigaction\n");
-            exit(-1);
+            _exit(-1);
         }
         print("0x");
         print(i);
@@ -139,7 +139,7 @@ void sigsegvHandler(int num, siginfo_t* siginfo, void* context)
             dumpMem(siginfo -> si_addr);
         }
     }
-    exit(0);
+    _exit(0);
 }
 
 int main(int argc, char* argv[], char *envp[])
