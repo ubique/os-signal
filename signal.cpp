@@ -1,10 +1,8 @@
-#include <iostream>
 #include <signal.h>
 #include <cstring>
 #include <map>
 #include <csetjmp>
 #include <limits>
-#include <vector>
 #include <unistd.h>
 #include <cstdio>
 #include <cstdlib>
@@ -21,7 +19,7 @@
 
 using namespace std;
 
-const map<string, int> registers = {{"R8",      REG_R8},
+const map<const char *, int> registers = {{"R8",      REG_R8},
                                     {"R9",      REG_R9},
                                     {"R10",     REG_R10},
                                     {"R11",     REG_R11},
@@ -48,21 +46,22 @@ const map<string, int> registers = {{"R8",      REG_R8},
 
 void checkErr(int value, const char *message) {
     if (value == -1) {
-        cerr << message << endl;
+        perror(message);
         exit(EXIT_FAILURE);
     }
 }
 
 jmp_buf jmp;
 
-void helper(int, siginfo_t * info, void *) {
+void helper(int, siginfo_t *info, void *) {
     if (info->si_signo == SIGSEGV) {
         siglongjmp(jmp, 1);
     }
 }
 
-void write(const char* data, size_t size) {
+void write(const char *data) {
     size_t result;
+    size_t size = strlen(data);
     while (size > 0 && (result = static_cast<size_t>(write(STDERR_FILENO, data, size)))) {
         if (result < 0 && errno == EINTR) {
             continue;
@@ -74,26 +73,36 @@ void write(const char* data, size_t size) {
     }
 }
 
-void write(std::string const& pointer) {
-    write(pointer.c_str(), pointer.size());
+void to_hex(char* res, size_t value, size_t len_in_bytes = 8) {
+    len_in_bytes *= 2;
+    res[0] = '0';
+    res[1] = 'x';
+    for (size_t i = 0; i < len_in_bytes; i++) {
+        size_t ch = value & 0xf;
+        value >>= 4;
+        res[2 + len_in_bytes - i - 1] = (ch < 10) ? ('0' + ch) : ('A' + ch - 10);
+    }
 }
 
-std::string to_hex(size_t value) {
-    std::stringstream stream;
-    stream << std::hex << value;
-    std::string res = stream.str();
-    return "0x" + res + (res.size() == 1 ? "0" : "");
-}
-
-std::string to_hex(char* value){
-    return "0x" + string(value);
+void write(int val){
+    char buf[1024];
+    to_hex(buf, val);
+    write(buf);
 }
 
 void sigHandler(int, siginfo_t *info, void *context) {
     if (info->si_signo == SIGSEGV) {
         write("registers here: \n");
+        char buf[1024];
         for (auto &reg :registers) {
-            write(string(reg.first.c_str()) + " = " +  to_hex(((ucontext_t*)context)->uc_mcontext.gregs[reg.second]) + "\n");
+            char const * ch = reg.first;
+            if (std::strcmp(ch, "") != 0) {
+                write(ch);
+                write("=");
+                to_hex(buf, ((ucontext_t*)context)->uc_mcontext.gregs[reg.second]);
+                write(buf);
+                write("\n");
+            }
         }
 
         for (char i = -16; i <= 16; i += sizeof(char)) {
@@ -117,11 +126,14 @@ void sigHandler(int, siginfo_t *info, void *context) {
             checkErr(sigaction(SIGSEGV, &action, nullptr), "Can't sigaction");
 
 
-
             if (setjmp(jmp) != 0) {
-                std::cout << std::hex << (void *) address << " unknown" << '\n';
+                write((uint64_t) address);
+                write(" unknown\n");
             } else {
-                std::cout << std::hex << (void *) address << " " << (int) *address << '\n';
+                write((uint64_t) address);
+                write(" ");
+                write(*address);
+                write("\n");
             }
         }
 
@@ -137,5 +149,7 @@ int main() {
     action.sa_sigaction = sigHandler;
     checkErr(sigaction(SIGSEGV, &action, nullptr), "Can't sigaction");
 
+    char * test = "abacaba";
+    test[8] = 'a';
     exit(EXIT_SUCCESS);
 }
