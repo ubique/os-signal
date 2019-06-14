@@ -4,14 +4,46 @@
 
 #include <csignal>
 #include <csetjmp>
+#include <unistd.h>
 
 const int MEMORY_DUMP_RANGE = 20;
-const char* regStr[] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
+const char* regStr[23] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
 "RDI", "RSI", "RBP", "RBX", "RDX", "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS",
 "ERR", "TRAPNO", "OLDMASK", "CR2"};
 
 static jmp_buf jmpBuf;
 
+
+void print(const char* string)
+{
+    write(1, string, strlen(string));
+}
+
+void printNum(long long num)
+{
+    if (num)
+    {
+        printNum(num >> 4);
+        char symbol = num & 15;
+        if (symbol < 10)
+        {
+            symbol += '0';
+        } else {
+            symbol += 'a' - 10;
+        }
+        write(1, &symbol, 1);
+    }
+}
+
+void print(long long num)
+{
+    if (num)
+    {
+        printNum(num);
+    } else {
+        print("0");
+    }
+}
 
 void sigsegvAddressHandler(int num, siginfo_t* siginfo, void* context)
 {
@@ -23,18 +55,31 @@ void sigsegvAddressHandler(int num, siginfo_t* siginfo, void* context)
 
 void dumpReg(ucontext_t* context)
 {
-    std::cout << "Registers dump \n";
+    print("Registers dump \n");
     for (size_t reg = 0; reg < NGREG; ++reg)
     {
-        std::cout << regStr[reg] << ": 0x" << std::hex << context->uc_mcontext.gregs[reg] << '\n';
+        print(regStr[reg]);
+        print(": 0x");
+        print(context->uc_mcontext.gregs[reg]);
+        print("\n");
     }
 }
 
 void dumpMem(void* address)
 {
-    std::cout << "Memory dump \n";
-    const long long from = std::max(0LL, (long long) ((char*) address - MEMORY_DUMP_RANGE));
-    const long long to = std::min(LONG_LONG_MAX, (long long) ((char*) address + MEMORY_DUMP_RANGE));
+    print("Memory dump \n");
+    long long shift = (long long)((char*) address - MEMORY_DUMP_RANGE);
+    long long from = 0;
+    if (shift > 0)
+    {
+        from = shift;
+    }
+    shift += MEMORY_DUMP_RANGE;
+    long long to = LONG_LONG_MAX;
+    if (shift < LONG_LONG_MAX - MEMORY_DUMP_RANGE)
+    {
+        to = shift + MEMORY_DUMP_RANGE;
+    }
     for (long long i = from; i < to; ++i)
     {
         sigset_t setSignal;
@@ -46,15 +91,18 @@ void dumpMem(void* address)
         sAction.sa_flags = SA_SIGINFO;
         if (sigaction(SIGSEGV, &sAction, nullptr) == -1)
         {
-            std::cout << "Error occurred during sigaction\n";
+            print("Error occurred during sigaction\n");
             exit(-1);
         }
-        std::cout << (void*) i << ' ';
+        print("0x");
+        print(i);
+        print(" ");
         if (setjmp(jmpBuf) != 0)
         {
-            std::cout << "failed to dump\n";
+            print("failed to dump\n");
         } else {
-            std::cout  << std::hex << (int)((const char*)i)[0] <<"\n";
+            print((int)((const char*)i)[0]);
+            print("\n");
         }
     }
 }
@@ -63,21 +111,27 @@ void sigsegvHandler(int num, siginfo_t* siginfo, void* context)
 {
     if (siginfo -> si_signo == SIGSEGV)
     {
-        std::cout << "Signal rejected: " << strsignal(num) << '\n';
+        print("Signal rejected: ");
+        print((const char*) strsignal(num));
+        print("\n");
         if (siginfo -> si_code == SEGV_MAPERR)
         {
-            std::cout << "Reason: nothing is mapped to address\n";
+            print("Reason: nothing is mapped to address\n");
         } else if(siginfo -> si_code == SEGV_ACCERR) {
-            std::cout << "Reason: access error\n";
+            print("Reason: access error\n");
         } else {
-            std::cout << "Error code: " << siginfo -> si_code << '\n';
+            print("Error code: ");
+            print(siginfo -> si_code);
+            print("\n");
         }
-        std::cout << "Address: ";
+        print("Address: ");
         if(siginfo -> si_addr == nullptr)
         {
-            std::cout << "nullptr\n";
+            print("nullptr. No memory dump needed\n");
         } else {
-            std::cout <<  siginfo -> si_addr << '\n';
+            print("0x");
+            print((intptr_t) siginfo -> si_addr);
+            print("\n");
         }
         dumpReg((ucontext_t*) context);
         if (siginfo -> si_addr != nullptr)
