@@ -74,6 +74,23 @@ void write_sizet(size_t x) {
 }
 
 
+void write_char(char x) {
+    int first = x & 0xf;
+    x >>= 4;
+    int second = x & 0xf;
+    if (first < 10) {
+        num_buffer[18] = '0' + first;
+    } else {
+        num_buffer[18] = 'a' + (first - 10);
+    }
+    if (second < 10) {
+        num_buffer[17] = '0' + second;
+    } else {
+        num_buffer[17] = 'a' + (second - 10);
+    }
+    write_string(num_buffer + 17);
+}
+
 
 void write_register(const char *reg, int num_reg, ucontext_t *ucontext) {
     write_string(reg);
@@ -111,11 +128,6 @@ void write_registers(ucontext_t *ucontext) {
 }
 
 
-
-void sig_helper(int, siginfo_t *, void *) {
-    siglongjmp(jmp, 1);
-}
-
 void sigact_handler(int, siginfo_t *info, void *context) {
     auto *ucontext = reinterpret_cast<ucontext_t *>(context);
 
@@ -132,29 +144,26 @@ void sigact_handler(int, siginfo_t *info, void *context) {
     char *right = addr > numeric_limits<char *>::max() - 16 ? numeric_limits<char *>::max() : addr + 16;
 
 
-    struct sigaction sa{};
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = sig_helper;
+    int pip[2];
+    if (pipe(pip) == -1) {
+        write_string("Unsuccessful create pipe");
+        exit(EXIT_FAILURE);
+    }
 
-
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGSEGV);
-    sigprocmask(SIG_UNBLOCK, &set, nullptr);
-
-    check_error(sigaction(SIGSEGV, &sa, nullptr), "sigaction");
-
-
-    for (char *i = left; i <= right; i += 4) {
-        if (setjmp(jmp) != 0) {
-            write_string("???");
+    int count_endl = 0;
+    for (char *i = left; i < right; i++) {
+        if (write(pip[1], i, 1) == -1) {
+            write_string("?? ");
         } else {
-            int tmp = write(STDERR_FILENO, i, 4);
-            if (tmp == -1) {
-                write_string("???");
-            }
+            write_char(*i);
+            write_string(" ");
         }
-        write_string("\n");
+
+        count_endl++;
+        if (count_endl == 4) {
+            write_string("\n");
+            count_endl = 0;
+        }
     }
 
     exit(EXIT_FAILURE);
@@ -168,5 +177,8 @@ int main() {
     check_error(sigaction(SIGSEGV, &sa, nullptr), "sigaction");
 
 
+    const char* s = "abcde";
+    char* x = const_cast<char*>(s);
+    *x = 'a';
     return 0;
 } 
