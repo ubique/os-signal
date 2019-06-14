@@ -11,7 +11,7 @@ void write_h(uint8_t b) {
     char c = (b < 10) ? char(b + '0') : char(b - 10 + 'A');
     ssize_t tmp = write(STDERR_FILENO, &c, 1);
     if (tmp == -1) {
-        exit(errno);
+        _exit(errno);
     }
 }
 
@@ -27,7 +27,7 @@ void write_s(char const *str) {
     while (cur < len) {
         tmp = write(STDERR_FILENO, str + cur, len - cur);
         if (tmp == -1) {
-            exit(errno);
+            _exit(errno);
         }
         cur += tmp;
     }
@@ -65,15 +65,11 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         }
         else
         {
-            write_s("Error code: ");
-            ssize_t tmp = write(STDERR_FILENO, &ret, sizeof(int));
-            if (tmp == -1) {
-                exit(errno);
-            }
-            write_s("\n");
+            write_s("Reason: something bad happend\n");
         }
 
         write_s("Registers dump: \n");
+        
         struct ucontext_t *ucontext = static_cast<ucontext_t*>(context);
         write_r("R8", ucontext->uc_mcontext.gregs[REG_R8]);
         write_r("R9", ucontext->uc_mcontext.gregs[REG_R9]);
@@ -105,7 +101,7 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         ret = pipe(pipe_fd);
         if (ret == -1) {
             write_s("Can't pipe\n");
-            exit(0);
+            _exit(45);
         }
         for (int i = -8; i < 8; i++) {
             char *t = (char*) (siginfo->si_addr) + i;
@@ -139,16 +135,16 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
                 write_s("\n");
             }
         }
+        write_s("\n"); 
     }
-    write_s("\n");
-    exit(0);
+    _exit(46);
 }
 
 int main(int argc, char *argv[], char *envp[])
 {
     struct sigaction action {};
     int ret;
-    action.sa_flags = SA_SIGINFO;
+    action.sa_flags = SA_SIGINFO | SA_NODEFER;
     ret = sigemptyset(&action.sa_mask);
     if (ret == -1) {
         fprintf(stderr, "sigemptyset: %s\n", strerror(errno));
@@ -166,10 +162,10 @@ int main(int argc, char *argv[], char *envp[])
         // test = nullptr;
         // *test = 1;
     //case 2:
-        test = (char *)"data";
-        *(--test) = 'A';
-    //case 3:
         // test = (char *)"data";
-        // test[5] = '1';
+        // *(--test) = 'A';
+    //case 3:
+        test = (char *)"data";
+        test[5] = '1';
     return 0;
 }
