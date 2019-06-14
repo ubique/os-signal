@@ -149,7 +149,5 @@ int main() {
     action.sa_sigaction = sigHandler;
     checkErr(sigaction(SIGSEGV, &action, nullptr), "Can't sigaction");
 
-    char * test = "abacaba";
-    test[8] = 'a';
     exit(EXIT_SUCCESS);
 }
