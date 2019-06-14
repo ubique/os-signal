@@ -139,7 +139,7 @@ void sigsegvHandler(int num, siginfo_t* siginfo, void* context)
             dumpMem(siginfo -> si_addr);
         }
     }
-    _exit(0);
+    _exit(1);
 }
 
 int main(int argc, char* argv[], char *envp[])
