@@ -3,16 +3,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <limits>
-
 #include <signal.h>
 
-
-const int MEMORY_DUMP_RANGE = 20 * sizeof(char);
 const int ALIGN_R = 7;
-const char *registers[] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
-                           "RDI", "RSI", "RBP", "RBX", "RDX", "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS",
-                           "ERR", "TRAPNO", "OLDMASK", "CR2"};
-
 
 void write_h(uint8_t b) {
     char c = (b < 10) ? char(b + '0') : char(b - 10 + 'A');
@@ -97,7 +90,7 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         ret = pipe(pipe_fd);
         if (ret == -1) {
             write_s("Can't pipe\n");
-            exit(0);
+            _exit(0);
         }
         for (int i = -8; i < 8; i++) {
             char *t = (char*) (siginfo->si_addr) + i;
@@ -132,7 +125,6 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
             }
         }
     }
-    exit(0);
 }
 
 int main(int argc, char *argv[], char *envp[])
