@@ -127,9 +127,9 @@ void handler(int sig, siginfo_t* info, void* context) {
 	if (!dump_memory(info, 64))
 	{
 		write_str_safe("cannot dump memory");
-		exit(EXIT_FAILURE);
+		_exit(EXIT_FAILURE);
 	}
-	exit(EXIT_SUCCESS);
+	_exit(EXIT_SUCCESS);
 }
 
 int main()
