@@ -1,22 +1,16 @@
 #include <unistd.h>
 #include <signal.h>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <ucontext.h>
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
 #include <limits>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/mman.h>
-#include <vector>
+#include <sys/types.h>
+#include <cstdlib>
+#include <errno.h>
+#include <cstdio>
 
 const int PAGESIZE = 4096;
 
-char get_char(uint8_t num) {
+char get_char(char num) {
     if (num < 10) {
         return '0' + num;
     } else {
@@ -40,6 +34,9 @@ void to_str(char* buffer, int value) {
     if (value < 0) {
         value = -value;
         buffer[0] = '-';
+        start++;
+    } else if (value > 0) {
+        buffer[0] = '+';
         start++;
     }
     int cp = value;
@@ -126,15 +123,17 @@ const char* get_register_name(greg_t reg) {
     }
 }
 
-void print_error(const char* message) {
+void print_error(const char* message, char* buffer) {
     write_to_stderr(message);
-    write_to_stderr(": ");
-    write_to_stderr(std::strerror(errno));
+    write_to_stderr(": error number = ");
+    to_str(buffer, errno);
+    write_to_stderr(buffer + 1);
     write_to_stderr("\n");
 }
 
 
 void sig_handler(int sig, siginfo_t* info, void* ucontext) {
+    int old_errno = errno;
     write_to_stderr("Segmentation fault at ");
     char buffer[1024];
     to_hex(buffer, (size_t)info->si_addr, 8);
@@ -144,7 +143,7 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
         const char * reg = get_register_name(i);
         if (std::strcmp(reg, "") != 0) {
             write_to_stderr(reg);
-            write_to_stderr("=");
+            write_to_stderr("\t=\t");
             to_hex(buffer, ((ucontext_t*)ucontext)->uc_mcontext.gregs[i], 8);
             write_to_stderr(buffer);
             write_to_stderr("\n");
@@ -162,13 +161,14 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
         write_to_stderr("Memory dump:\n");
         int fd[2];
         if (pipe(fd) < 0) {
-            print_error("Pipe failed");
+            print_error("Can't create pipe", buffer);
+            errno = old_errno;
             exit(EXIT_FAILURE);
         }
         size_t j = 0;
         for(char* pos = (char*)start; pos != (char*)finish; pos++, j++) {
             if (j % 8 == 0) {
-                to_str(buffer, (ptrdiff_t)pos - (ptrdiff_t)info->si_addr);
+                to_str(buffer, (int64_t)pos - (int64_t)info->si_addr);
                 write_to_stderr(buffer);
                 write_to_stderr(":\t");
             }
@@ -183,12 +183,13 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
             }
         }
         if (close(fd[0]) < 0) {
-            print_error("Can't close pipe");
+            print_error("Can't close pipe", buffer);
         }
         if (close(fd[1]) < 0) {
-            print_error("Can't close pipe");
+            print_error("Can't close pipe", buffer);
         }
     }
+    errno = old_errno;
     exit(EXIT_FAILURE);
 }
 
