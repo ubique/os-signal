@@ -9,7 +9,7 @@ const int ALIGN_R = 7;
 
 void write_h(uint8_t b) {
     char c = (b < 10) ? char(b + '0') : char(b - 10 + 'A');
-    tmp = write(STDERR_FILENO, &c, 1);
+    ssize_t tmp = write(STDERR_FILENO, &c, 1);
     if (tmp == -1) {
         exit(errno);
     }
@@ -22,10 +22,10 @@ void write_b(uint8_t b) {
 
 void write_s(char const *str) {
     ssize_t cur = 0;
-    ssize_t len = static_cast<ssize_t>(strlen(s));
+    ssize_t len = static_cast<ssize_t>(strlen(str));
     ssize_t tmp;
     while (cur < len) {
-        tmp = write(STDERR_FILENO, s + cur, len - cur);
+        tmp = write(STDERR_FILENO, str + cur, len - cur);
         if (tmp == -1) {
             exit(errno);
         }
@@ -66,7 +66,7 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         else
         {
             write_s("Error code: ");
-            tmp = write(STDERR_FILENO, &ret, sizeof(int));
+            ssize_t tmp = write(STDERR_FILENO, &ret, sizeof(int));
             if (tmp == -1) {
                 exit(errno);
             }
@@ -166,8 +166,8 @@ int main(int argc, char *argv[], char *envp[])
         // test = nullptr;
         // *test = 1;
     //case 2:
-        // test = (char *)"data";
-        // *(--test) = 'A';
+        test = (char *)"data";
+        *(--test) = 'A';
     //case 3:
         // test = (char *)"data";
         // test[5] = '1';
