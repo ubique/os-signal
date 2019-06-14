@@ -79,7 +79,7 @@ void dumpMem(intptr_t addr){
         if(sigaction(SIGSEGV,&sa, nullptr) == -1){
             write_str("Error occured during sigaction");
             write_str("\n");
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
         if (setjmp(env) != 0)
         {
@@ -128,7 +128,7 @@ void handler (int signal ,siginfo_t * info,void* context ){
         if(info->si_addr != nullptr) dumpMem(reinterpret_cast<uintptr_t>(info->si_addr));
         dumpReg(static_cast<ucontext_t*>(context));
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 void first_test(){
     int *p = nullptr;
@@ -146,7 +146,7 @@ int main() {
     sa.sa_sigaction = handler;
     if(sigaction(SIGSEGV,&sa,nullptr) == -1){
         write_str("sigaction error");
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 //    write_str("testing with nullptr : ");
 //    write_str("\n");
