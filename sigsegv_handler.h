@@ -5,50 +5,62 @@
 #ifndef OS_SIGNAL_SIGSEGV_HANDLER_H
 #define OS_SIGNAL_SIGSEGV_HANDLER_H
 
-#include <bits/types/siginfo_t.h>
 #include <signal.h>
 #include <sys/ucontext.h>
-#include <string>
-#include <vector>
-#include <iostream>
-#include <csetjmp>
 #include <iomanip>
 #include <limits>
+#include <unistd.h>
+#include <cstring>
 
-static const char* registers[] = {"R8",
-                                  "R9",
-                                  "R10",
-                                  "R11",
-                                  "R12",
-                                  "R13",
-                                  "R14",
-                                  "R15",
-                                  "RDI",
-                                  "RSI",
-                                  "RBP",
-                                  "RBX",
-                                  "RDX",
-                                  "RAX",
-                                  "RCX",
-                                  "RSP",
-                                  "RIP",
-                                  "EFL",
-                                  "CSGSFS",
-                                  "ERR",
-                                  "TRAPNO",
-                                  "OLDMASK",
-                                  "CR2"};
+namespace {
 
-static const size_t DUMP_RANGE = 16;
+    const char *registers[] = {"R8",
+                               "R9",
+                               "R10",
+                               "R11",
+                               "R12",
+                               "R13",
+                               "R14",
+                               "R15",
+                               "RDI",
+                               "RSI",
+                               "RBP",
+                               "RBX",
+                               "RDX",
+                               "RAX",
+                               "RCX",
+                               "RSP",
+                               "RIP",
+                               "EFL",
+                               "CSGSFS",
+                               "ERR",
+                               "TRAPNO",
+                               "OLDMASK",
+                               "CR2"};
 
-static jmp_buf buf;
+    const size_t DUMP_RANGE = 16;
 
-void print_address(size_t address) {
-    std::cerr << "0x" << std::setw(16) << std::setfill('0') << std::right << address;
-}
+    void print_char(char x) {
+        write(1, &x, 1);
+    }
 
-void noop_handler(int signum, siginfo_t* info, void* context) {
-    longjmp(buf, 1);
+    void print_byte(char x) {
+        char hi = static_cast<uint8_t>(x) / 16;
+        char lo = static_cast<uint8_t>(x) % 16;
+        print_char(hi < 10  ? '0' + hi : 'A' + hi - 10);
+        print_char(lo < 10  ? '0' + lo : 'A' + lo - 10);
+    }
+
+    void print_string(const char* s) {
+        write(1, s, strlen(s));
+    }
+
+    void print_address(size_t address) {
+        print_string("0x");
+        for (int i = 14; i >= 0; i -= 2) {
+            print_byte((address >> i) & 0xFF);
+        }
+    }
 }
 
 void sigsegv_handler(int sig_num, siginfo_t* info, void* context) {
@@ -56,75 +68,69 @@ void sigsegv_handler(int sig_num, siginfo_t* info, void* context) {
     mcontext_t mcontext = ucontext->uc_mcontext;
     greg_t* regs = mcontext.gregs;
 
-    // not using std::showbase because of std::uppercase
-    std::cerr << std::hex << std::uppercase;
     auto address = reinterpret_cast<size_t>(info->si_addr);
 
-    std::cerr << "Memory access violation at ";
+    print_string("Memory access violation at ");
     print_address(address);
-    std::cerr << std::endl;
+    print_char('\n');
 
     if (info->si_code == SEGV_MAPERR) {
-        std::cerr << "Address not mapped to object";
+        print_string("Address not mapped to object\n\n");
     } else if (info->si_code == SEGV_ACCERR) {
-        std::cerr << "Invalid permissions for mapped object";
+        print_string("Invalid permissions for mapped object\n\n");
     } else if (info->si_code == SEGV_BNDERR) {
-        std::cerr << "Failed address bound checks";
+        print_string("Failed address bound checks\n\n");
     } else if (info->si_code == SEGV_PKUERR) {
-        std::cerr << "Access was denied by memory protection keys";
+        print_string("Access was denied by memory protection keys\n\n");
     } else {
-        std::cerr << "Reason is unknown";
+        print_string("Reason is unknown\n\n");
     }
-    std::cerr << std::endl << std::endl;
-
     
     // dump registers
-    std::cerr << "Registers:" << std::endl;
+    print_string("Registers:\n");
     for (int i = 0; i < NGREG; i++) {
-        std::cerr << std::setw(10) << std::setfill(' ') << std::left << registers[i] << ": ";
+        print_string(registers[i]);
+        print_string(": ");
         print_address(regs[i]);
-        std::cerr << std::endl;
+        print_char('\n');
     }
-    std::cerr << std::endl;
-
+    print_char('\n');
 
     // dump memory
-    struct sigaction act{};
-    act.sa_flags = SA_SIGINFO | SA_NODEFER;
-    act.sa_handler = reinterpret_cast<__sighandler_t>(noop_handler);
-
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGSEGV);
-    sigprocmask(SIG_UNBLOCK, &set, nullptr);
-
-    sigaction(SIGSEGV, &act, nullptr);
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("Could not create pipe");
+        exit(EXIT_FAILURE);
+    }
 
     char* ptr = reinterpret_cast<char*>(info->si_addr);
     char* begin = ptr - DUMP_RANGE < ptr ? ptr - DUMP_RANGE : nullptr;
     char* end = ptr + DUMP_RANGE > ptr ? ptr + DUMP_RANGE : std::numeric_limits<char*>::max();
 
-    std::cerr << "Memory from ";
+    print_string("Memory from ");
     print_address(reinterpret_cast<size_t>(begin));
-    std::cerr << " to ";
+    print_string(" to ");
     print_address(reinterpret_cast<size_t>(end));
-    std::cerr << std::endl;
+    print_char('\n');
 
     for (char* i = begin; i <= end; i++) {
-        if (setjmp(buf) != 0) {
-            std::cerr << "??";
+        char ch;
+        if (write(pipefd[1], i, 1) == -1) {
+            print_string("??");
+        } else if (read(pipefd[0], &ch, 1) == -1) {
+            print_string("??");
         } else {
-            char ch = *i;
-            std::cerr << std::setw(2) << std::setfill('0') << (static_cast<uint32_t>(ch) & 0xFFu);
+            print_byte(ch);
         }
-        std::cerr << ' ';
+
+        print_char(' ');
     }
-    std::cerr << std::endl;
+    print_char('\n');
 
     for (char* i = begin; i < ptr; i++) {
-        std::cerr << "   ";
+        print_string("   ");
     }
-    std::cerr << "^^" << std::endl;
+    print_string("^^\n");
 
 
     exit(EXIT_FAILURE);
