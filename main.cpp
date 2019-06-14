@@ -6,10 +6,12 @@
 #include <map>
 #include <csetjmp>
 #include <zconf.h>
+#include <unistd.h>
 
-using std::cout;
+#define writeString(string) write(1, string, strlen(string))
+#define LINE_BREAK writeString("\n")
 
-std::vector<std::pair<std::string, greg_t>> registers = {
+std::vector<std::pair<const char *, greg_t>> registers = {
         {"R8      : ", REG_R8},
         {"R9      : ", REG_R9},
         {"R10     : ", REG_R10},
@@ -35,28 +37,41 @@ std::vector<std::pair<std::string, greg_t>> registers = {
         {"CR2     : ", REG_CR2}
 };
 
-gregset_t *gregset;
-
 const int R = 64;
 
 static jmp_buf jmpBuf;
 
+void writeByte(intptr_t byte) {
+    if (!byte) return;
+    writeByte(byte >> 4);
+    char sym = byte & ((1ll << 4) - 1);
+    if (sym > 9) sym += 'a' - 10;
+    else sym += '0';
+    write(1, &sym, 1);
+}
+
+void writeNumber(uintptr_t number) {
+    if (number == 0) writeString("0");
+    else writeByte(number);
+}
+
+
 void processSiCode(int code) {
     switch (code) {
         case SEGV_ACCERR:
-            cout << "Rights to the reflected object are incorrect\n";
+            writeString("Rights to the reflected object are incorrect\n");
             return;
         case SEGV_MAPERR:
-            cout << "Address does not match the object\n";
+            writeString("Address does not match the object\n");
             return;
         case SEGV_BNDERR:
-            cout << "Error checking the boundaries of the address\n";
+            writeString("Error checking the boundaries of the address\n");
             return;
         case SEGV_PKUERR:
-            cout << "Access denied by memory protection bits\n";
+            writeString("Access denied by memory protection bits\n");
             return;
         default:
-            cout << "Unknown\n";
+            writeString("Unknown\n");
             return;
     }
 }
@@ -80,37 +95,46 @@ void dumpMemory(void *address) {
         action.sa_flags = SA_SIGINFO;
 
         if (sigaction(SIGSEGV, &action, nullptr) == -1) {
-            perror("address sigaction");
+            writeString("address sigaction");
             return;
         }
 
-        cout << "0x" << i << ' ';
         if (setjmp(jmpBuf) != 0) {
-            std::cout << "error during dump\n";
+            writeString("error during dump\n");
 //            return;
         } else {
-             cout << std::hex << +*reinterpret_cast<char *>(i) << '\n';
+            writeString("0x");
+            writeNumber(static_cast<uintptr_t >(i));
+            LINE_BREAK;
         }
     }
 }
 
 void sigsegvHandler(int sig, siginfo_t *si, void *context) {
     if (si->si_signo == SIGSEGV) {
-        cout << "Signal : " << strsignal(sig) << '\n';
+        writeString("Signal : ");
+        writeString(strsignal(sig));
+        LINE_BREAK;
         processSiCode(si->si_code);
 
         if (si->si_addr != nullptr) {
-            cout << "Address : " << si->si_addr << '\n';
+            writeString("Address : 0x");
+            writeNumber(reinterpret_cast<uintptr_t >(si->si_addr));
+            LINE_BREAK;
             dumpMemory(si->si_addr);
         } else {
-            std::cerr << "Address is NULL\n";
+            writeString("Address is NULL\n");
         }
 
-        gregset = &static_cast<ucontext_t *>(context)->uc_mcontext.gregs;
-        for (auto &i: registers)
-            cout << i.first << gregset[i.second] << '\n';
+        auto gregset = static_cast<ucontext_t *>(context)->uc_mcontext.gregs;
+        for (auto &i: registers) {
+            writeString(i.first);
+            writeString("0x");
+            writeNumber(gregset[i.second]);
+            LINE_BREAK;
+        }
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 
@@ -120,15 +144,15 @@ int main() {
     action.sa_sigaction = sigsegvHandler;
     if (sigaction(SIGSEGV, &action, nullptr) == -1) {
         perror("sigaction");
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 
     // any code causing errors
 
     char a[1];
 
-    for (auto ptr = a; ; ++ptr) {
-        ++*ptr;
+    for (auto ptr = a;; ++ptr) {
+        --*ptr;
     }
     return 0;
 }
