@@ -125,6 +125,8 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
             }
         }
     }
+    write_s("\n");
+    _exit(0);
 }
 
 int main(int argc, char *argv[], char *envp[])
@@ -146,8 +148,8 @@ int main(int argc, char *argv[], char *envp[])
     }
     char *test;
     //case 1:
-        test = nullptr;
-        *test = 1;
+        // test = nullptr;
+        // *test = 1;
     //case 2:
         // test = (char *)"data";
         // *(--test) = 'A';
