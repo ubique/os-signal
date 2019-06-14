@@ -9,7 +9,10 @@ const int ALIGN_R = 7;
 
 void write_h(uint8_t b) {
     char c = (b < 10) ? char(b + '0') : char(b - 10 + 'A');
-    write(1, &c, 1);
+    tmp = write(STDERR_FILENO, &c, 1);
+    if (tmp == -1) {
+        exit(errno);
+    }
 }
 
 void write_b(uint8_t b) {
@@ -18,7 +21,16 @@ void write_b(uint8_t b) {
 }
 
 void write_s(char const *str) {
-    write(1, str, strlen(str));
+    ssize_t cur = 0;
+    ssize_t len = static_cast<ssize_t>(strlen(s));
+    ssize_t tmp;
+    while (cur < len) {
+        tmp = write(STDERR_FILENO, s + cur, len - cur);
+        if (tmp == -1) {
+            exit(errno);
+        }
+        cur += tmp;
+    }
 }
 
 void write_r(char const *reg_s, uint64_t reg_v) {
@@ -54,7 +66,10 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         else
         {
             write_s("Error code: ");
-            write(1, &ret, sizeof(int));
+            tmp = write(STDERR_FILENO, &ret, sizeof(int));
+            if (tmp == -1) {
+                exit(errno);
+            }
             write_s("\n");
         }
 
@@ -90,7 +105,7 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         ret = pipe(pipe_fd);
         if (ret == -1) {
             write_s("Can't pipe\n");
-            _exit(0);
+            exit(0);
         }
         for (int i = -8; i < 8; i++) {
             char *t = (char*) (siginfo->si_addr) + i;
@@ -126,7 +141,7 @@ void sigsegvHandler(int num, siginfo_t *siginfo, void *context)
         }
     }
     write_s("\n");
-    _exit(0);
+    exit(0);
 }
 
 int main(int argc, char *argv[], char *envp[])
