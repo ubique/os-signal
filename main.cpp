@@ -64,7 +64,7 @@ void write_to_stderr(const char* pointer, int old_errno) {
         }
         if (result < 0) {
             errno = old_errno;
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
         len -= result;
         pointer += result;
@@ -164,7 +164,7 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
         if (pipe(fd) < 0) {
             print_error("Can't create pipe", buffer, old_errno);
             errno = old_errno;
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
         size_t j = 0;
         for(char* pos = (char*)start; pos != (char*)finish; pos++, j++) {
@@ -191,7 +191,7 @@ void sig_handler(int sig, siginfo_t* info, void* ucontext) {
         }
     }
     errno = old_errno;
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 
