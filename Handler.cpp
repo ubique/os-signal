@@ -108,7 +108,6 @@ void Handler::dumpMemory(void* address) {
     }
 
     for (int i = -MEMORY_SIZE; i < MEMORY_SIZE; ++i) {
-        uint8_t n;
         char* t = ((char*)address) + i;
         if (t == address) {
             Writer::writeSafe("--> ");
@@ -117,10 +116,9 @@ void Handler::dumpMemory(void* address) {
         if (write(pipefd[1], t, 1) < 0 || read(pipefd[0], &buffer, 1) < 0) {
             Writer::writeSafe("????");
         } else {
-            Writer::writeSafe(n);
+            Writer::writeSafe(buffer);
         }
         Writer::writeSafe("\n");
-
 
     }
 
