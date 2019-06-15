@@ -112,6 +112,7 @@ static void sigsegv_handler(int s, siginfo_t *siginfo, void *context) {
                     printString("here: ");
                 }
                 printNum(reinterpret_cast<uint64_t>(i));
+                printString("\n");
                 //std::cout << std::hex << (void *)i << ' ' << (int) *i << std::endl;
             }
         }
@@ -130,6 +131,13 @@ int main() {
     act.sa_sigaction = &sigsegv_handler;
     if (sigaction(SIGSEGV, &act, nullptr)== -1) {
         perror("Can't change signal action\n");
+    }
+
+
+    int unused[1] = {28};
+    char a[2];
+    for (char* i = a; ; ++i) {
+        *i = 42;
     }
 
     return 0;
