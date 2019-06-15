@@ -21,10 +21,10 @@ int main() {
 
     if (sigaction(SIGSEGV, &handleAction, nullptr) != 0) {
         perror("Signal action binding");
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 
-    std::cout << "Enter case number\nOut of Bounds case: 1\nNull Pointer case: 2" << std::endl;
+    Utils::printString("Enter case number\nOut of Bounds case: 1\nNull Pointer case: 2\n");
 
     int selectedCase;
     std::cin >> selectedCase;
@@ -32,15 +32,15 @@ int main() {
     switch (selectedCase) {
         case 1: {
             outOfBoundsFunction();
-            exit(EXIT_SUCCESS);
+            _exit(EXIT_SUCCESS);
         }
         case 2: {
             nullPointerFunction();
-            exit(EXIT_SUCCESS);
+            _exit(EXIT_SUCCESS);
         }
         default: {
-            std::cout << "Unknown case" << std::endl;
-            exit(EXIT_FAILURE);
+            Utils::printString("Unknown case\n");
+            _exit(EXIT_FAILURE);
         }
     }
 }

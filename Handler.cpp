@@ -4,9 +4,7 @@
 
 #include "Handler.h"
 
-static jmp_buf env;
-
-std::map<std::string, int> Handler::REGISTERS = {
+std::map<const char *, int> Handler::REGISTERS = {
         {"R8",      REG_R8},
         {"R9",      REG_R9},
         {"R10",     REG_R10},
@@ -32,78 +30,67 @@ std::map<std::string, int> Handler::REGISTERS = {
         {"OLDMASK", REG_OLDMASK},
 };
 
-void Handler::helper(int sigIgnored, siginfo_t *info, void *contextIgnored) {
-    if (info->si_signo == SIGSEGV) {
-        siglongjmp(env, 1);
-    }
-}
-
 void Handler::dumpMemory(void *address) {
-    std::cout << "Memory dumping... " << std::endl;
+    Utils::printString("Memory dumping... \n");
+
+    int descriptors[2];
 
     if (address == nullptr) {
-        std::cout << "Address is NULL" << std::endl;
-        exit(EXIT_FAILURE);
+        Utils::printString("Address is NULL\n");
+        _exit(EXIT_FAILURE);
     }
 
-    std::cout << "Checking memory nearby..." << std::endl;
+    if (pipe(descriptors) == -1) {
+        Utils::printString("Unable to dump memory!\n");
+    }
+
+    Utils::printString("Checking memory nearby...\n");
 
     size_t size = sizeof(char);
-    long long from = std::max(0ll, (long long) ((char *) address - MEMORY_NEARBY * size));
-    long long to = std::min(std::numeric_limits<long long>::max(),
-                            (long long) ((char *) address + MEMORY_NEARBY * size));
+    long long from = std::max(0ll, (long long) ((unsigned char *) address - MEMORY_NEARBY * size));
+    long long to = std::min(LONG_LONG_MAX, (long long) ((unsigned char *) address + MEMORY_NEARBY * size));
 
-    for (long long item = from; item < to; item += size) {
-        sigset_t sigset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset, SIGSEGV);
-        sigprocmask(SIG_UNBLOCK, &sigset, nullptr);
-
-        struct sigaction action{};
-        action.sa_sigaction = helper;
-        action.sa_flags = SA_SIGINFO;
-
-        if (sigaction(SIGSEGV, &action, nullptr) != 0) {
-            perror("Dump address");
-            exit(EXIT_FAILURE);
-        }
-
-        if (setjmp(env) != 0) {
-            std::cout << "Unable to dump address" << std::endl;
+    for (long long i = from; i < to; i += 2) {
+        if (write(descriptors[1], (unsigned char *) i, 1) != -1) {
+            Utils::printNumber((*((unsigned char *) i) & 0xFFu), 1);
         } else {
-            std::cout << " " << *reinterpret_cast<char *>(item) << " ";
+            Utils::printString("Bad memory");
         }
+        Utils::printChar(' ');
     }
 
-    std::cout << std::endl;
+    Utils::printChar('\n');
 }
 
 void Handler::dumpRegisters(ucontext_t *ucontext) {
-    std::cout << "Registers dumping..." << std::endl;
-
-    greg_t *gRegs = ucontext->uc_mcontext.gregs;
+    Utils::printString("Registers dumping...\n");
 
     for (const auto &item : REGISTERS) {
-        std::cout << " " << item.first << ": " << gRegs[item.second] << std::endl;
+        Utils::printChar(' ');
+        Utils::printString(item.first);
+        Utils::printString(": ");
+        Utils::printHex(ucontext->uc_mcontext.gregs[item.second]);
+        Utils::printChar('\n');
     }
 }
 
 void Handler::handler(int signalNumber, siginfo_t *siginfo, void *context) {
-    std::cout << "Detected: " << strsignal(signalNumber) << std::endl;
+    Utils::printString(strsignal(signalNumber));
+    Utils::printString(" detected!\n");
 
     if (siginfo->si_signo == SIGSEGV) {
         switch (siginfo->si_code) {
             case SEGV_MAPERR: {
-                std::cout << "Reason: Address doesn't relate to the object" << std::endl;
+                Utils::printString("Reason: Address doesn't relate to the object\n");
                 break;
             }
             case SEGV_ACCERR: {
-                std::cout << "Reason: Invalid rights to access the object" << std::endl;
+                Utils::printString("Reason: Invalid rights to access the object\n");
                 break;
             }
             default: {
-                std::cout << "Unknown reason!!! WTF!!!" << std::endl;
-                exit(EXIT_FAILURE);
+                Utils::printString("Unknown reason!!! WTF!!!\n");
+                _exit(EXIT_FAILURE);
             }
         }
 
@@ -111,8 +98,8 @@ void Handler::handler(int signalNumber, siginfo_t *siginfo, void *context) {
         dumpRegisters(reinterpret_cast<ucontext_t *> (context));
 
     } else {
-        std::cout << "Signal handle by default behavior" << std::endl;
+        Utils::printString("Signal handle by default behavior\n");
     }
 
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }

@@ -5,15 +5,15 @@
 #pragma once
 
 #include <iostream>
-#include <cstring>
-#include <string>
 #include <map>
 #include <limits>
-#include <csetjmp>
 
 #include <signal.h>
 
+#include <sys/param.h>
 #include <sys/ucontext.h>
+
+#include "Utils.h"
 
 #define MEMORY_NEARBY 20
 
@@ -22,14 +22,11 @@ public:
     static void handler(int, siginfo_t*, void*);
 
 private:
-    static void helper(int, siginfo_t*, void*);
-
     static void dumpMemory(void*);
 
     static void dumpRegisters(ucontext_t*);
 
-    static std::map<std::string, int> REGISTERS;
-
+    static std::map<const char*, int> REGISTERS;
 };
 
 
