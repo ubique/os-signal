@@ -4,13 +4,32 @@
 #include <cstdio>
 #include <iostream>
 #include <ucontext.h>
+#include <unistd.h>
 #include <cmath>
-#include <algorithm>
 #include <climits>
 #include <sys/ucontext.h>
-#include <csetjmp>
 
 typedef long long LL;
+
+void write_part(uint8_t byte) {
+    char c = byte < 10 ? byte + '0' : byte + 'A' - 10;
+    write(1, &c, 1);
+}
+
+void write_byte(uint8_t byte) {
+    write_part(byte / 16);
+    write_part(byte % 16);
+}
+
+void safe_write(uint64_t value) {
+    for (int i = 7; i >= 0; --i) {
+        write_byte(0xFF & (value >> (8 * i)));
+    }
+}
+
+void safe_write(const char* string) {
+    write(1, string, strlen(string));
+}
 
 const char* register_to_string(int reg) {
     switch (reg) {
@@ -65,76 +84,67 @@ const char* register_to_string(int reg) {
     }
 }
 
-static jmp_buf jbuf;
-
-void handler_sigsegv_address(int signum, siginfo_t* siginfo, void* context) {
-    if (siginfo->si_signo == SIGSEGV) {
-        siglongjmp(jbuf, 1);
-    }
-}
-
-void address_dump(LL address) {
-    sigset_t signal_set;
-    sigemptyset(&signal_set);
-    sigaddset(&signal_set, SIGSEGV);
-    sigprocmask(SIG_UNBLOCK, &signal_set, nullptr);
-
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_sigaction = handler_sigsegv_address;
-    act.sa_flags = SA_SIGINFO;
-
-    if (sigaction(SIGSEGV, &act, nullptr) < 0) {
-        std::cerr << "Sigaction failed: " << strerror(errno) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-    const char* p = (const char*)address;
-    if (setjmp(jbuf) == 0) {
-        printf("ADDRESS_0x%p %x\n", (void*)address, (int)p[0]);
+void address_dump(int my_pipe[], char* address, int index) {
+    uint8_t value;
+    char* cur = address + index;
+    if (write(my_pipe[1], cur, 1) < 0 || read(my_pipe[0], &value, 1) < 0) {
+        safe_write("Unknown");
     } else {
-        printf("ADDRESS_0x%p (bad)\n", (void*)address);
+        safe_write(value);
     }
+    safe_write("\n");
 }
 
-void memory_dump(void* address) {
-    std::cout << "MEMORY DUMP" << std::endl;
-    LL from = std::max((LL)0, (LL)((char*)address - 20 * sizeof(char)));
-    LL to = std::min(LONG_LONG_MAX, (LL)((char*)address + 20 * (sizeof(char))));
-    for (LL i = from; i < to; i += sizeof(char)) {
-        address_dump(i);
+void memory_dump(char* address) {
+    int my_pipe[2];
+    if (pipe(my_pipe) < 0) {
+        safe_write("Error. Unable to pipe");
+        _exit(EXIT_FAILURE);
+    }
+    safe_write("--------MEMORY--------\n");
+    if (address == nullptr) {
+        safe_write("NULL\n");
+        _exit(EXIT_FAILURE);
+    }
+    for (int i = -20; i <= 20; ++i) {
+        address_dump(my_pipe, address, i);
     }
 }
 
 void registers_dump(ucontext_t* context) {
-    std::cout << "REGISTERS" << std::endl;
+    safe_write("--------REGISTERS--------\n");
+    greg_t* gregs = context->uc_mcontext.gregs;
     for (int reg = 0; reg < NGREG; ++reg) {
-        printf("%-10s\t0x%x\n", register_to_string(reg), (unsigned int)context->uc_mcontext.gregs[reg]);
+        safe_write(register_to_string(reg));
+        safe_write(": ");
+        safe_write(gregs[reg]);
+        safe_write("\n");
     }
 }
 
 void handler_sigsegv(int signum, siginfo_t* siginfo, void* context) {
     if (siginfo->si_signo == SIGSEGV) {
-        std::cout << "ERROR. Segmentation fault. Tried to access " << siginfo->si_addr << ". ";
+        safe_write("ERROR. Segmentation fault. Tried to access ");
+        safe_write((uint64_t)siginfo->si_addr);
+        safe_write("\n");
         switch (siginfo->si_code) {
             case SEGV_MAPERR:
-                std::cout << "Address not mapped to object." << std::endl;
+                safe_write("Address not mapped to object.\n");
                 break;
             case SEGV_ACCERR:
-                std::cout << "Invalid permissions for mapped object." << std::endl;
+                safe_write("Invalid permissions for mapped object.\n");
                 break;
             default:
-                std::cout << "Unknown error." << std::endl;
+                safe_write("Unknown error.\n");
         }
-        std::cout << "----------LOG---------" << std::endl;
         registers_dump((ucontext_t*)context);
-        memory_dump(siginfo->si_addr);
+        memory_dump((char*)siginfo->si_addr);
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 void test1() {
     char* c = (char*)"LETSROCK";
-    std::cout << "String starts from: " << (void*)c << std::endl;
     c[9] = 'A';
 }
 
@@ -143,16 +153,16 @@ void test2() {
     *x = 10;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char* argv[]) {
     struct sigaction action;
     memset(&action, 0, sizeof(action));
     action.sa_sigaction = handler_sigsegv;
     action.sa_flags = SA_SIGINFO;
     if (sigaction(SIGSEGV, &action, nullptr) < 0) {
-        std::cerr << "Sigaction failed: " << strerror(errno) << std::endl;
-        exit(EXIT_FAILURE);
+        safe_write("Error. Sigaction failed\n");
+        _exit(EXIT_FAILURE);
     }
     test1();
     //test2();
-    exit(EXIT_SUCCESS);
+    _exit(EXIT_SUCCESS);
 }
