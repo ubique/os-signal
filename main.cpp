@@ -1,13 +1,18 @@
-#include <iostream>
 #include "Handler.h"
+#include <iostream>
 #include <string.h>
-
+#include <cstring>
 
 void fall() {
     int* p = nullptr;
     *p = 13;
 }
 
+void fall2() {
+    char* str = const_cast<char*>("Hello, my friend");
+    str[16] = '1';
+
+}
 int main() {
     struct sigaction action{};
     action.sa_sigaction = Handler::handleSignal;
@@ -17,7 +22,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    fall();
+    //fall();
+    fall2();
 
     exit(EXIT_SUCCESS);
 }

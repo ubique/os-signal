@@ -8,76 +8,120 @@
 #include <climits>
 #include <string.h>
 
+namespace Writer {
+    void partialWrite(uint8_t n) {
+        char c = n < 10 ? n + '0' : n + 'A' - 10;
+        write(1, &c, 1);
+    }
+
+    void writeByte(uint8_t byte) {
+        partialWrite(byte / 16);
+        partialWrite(byte % 16);
+    }
+
+    void writeSafe(const char* chars) {
+        write(1, chars, strlen(chars));
+    }
+
+    void writeSafe(uint64_t num) {
+        for (int i = 7; i >= 0; --i) {
+            writeByte(0xFF && (num >> (8 * i)));
+        }
+    }
+
+    void writeSafeRegister(const char* reg, greg_t greg) {
+        writeSafe(reg);
+        writeSafe(" --- ");
+        writeSafe(greg);
+        writeSafe("\n");
+    }
+};
+
+
 
 void Handler::handleSignal(int signum, siginfo_t* info, void* context) {
     if (info->si_signo == SIGSEGV) {
-        std::cout << "Tried access " << info->si_addr << std::endl;
+        Writer::writeSafe("Aborted: ");
+        Writer::writeSafe(strsignal(signum));
+        Writer::writeSafe("\n");
         switch (info->si_code) {
             case SEGV_ACCERR:
-                std::cout << "SEGV_ACCERR" << std::endl;
+                Writer::writeSafe("SEGV_ACCERR\n");
                 break;
             case SEGV_MAPERR:
-                std::cout << "SEGV_MAPPER" << std::endl;
+                Writer::writeSafe("SEGV_MAPPER\n");
                 break;
             default:
-                std::cout << "Unknown si_code" << std::endl;
+                Writer::writeSafe("Unknown si_code\n");
+
         }
 
-        std::cout << "Dumping registers..." << std::endl;
+        Writer::writeSafe("Dumping registers...\n");
         auto rContext = reinterpret_cast<ucontext_t*>(context);
         dumpRegisters(rContext);
-        std::cout << "Registers dumped." << std::endl;
+        Writer::writeSafe("Registers dumped.\n");
 
-        std::cout << "Dumping memory..." << std::endl;
+        Writer::writeSafe("Dumping memory...\n");
         dumpMemory(info->si_addr);
-        std::cout << "Memory dumped." << std::endl;
+        Writer::writeSafe("Memory dumped.\n");
     }
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 void Handler::dumpRegisters(ucontext_t* context) {
-    for (int r = 0; r < 23; ++r) {
-        std::cout << "Register " << r <<
-        static_cast<unsigned int>(context->uc_mcontext.gregs[r]) << std::endl;
-    }
+    Writer::writeSafeRegister("R8", context->uc_mcontext.gregs[REG_R8]);
+    Writer::writeSafeRegister("R9", context->uc_mcontext.gregs[REG_R9]);
+    Writer::writeSafeRegister("R10", context->uc_mcontext.gregs[REG_R10]);
+    Writer::writeSafeRegister("R11", context->uc_mcontext.gregs[REG_R11]);
+    Writer::writeSafeRegister("R12", context->uc_mcontext.gregs[REG_R12]);
+    Writer::writeSafeRegister("R13", context->uc_mcontext.gregs[REG_R13]);
+    Writer::writeSafeRegister("R14", context->uc_mcontext.gregs[REG_R14]);
+    Writer::writeSafeRegister("R15", context->uc_mcontext.gregs[REG_R15]);
+    Writer::writeSafeRegister("RDI", context->uc_mcontext.gregs[REG_RDI]);
+    Writer::writeSafeRegister("RSI", context->uc_mcontext.gregs[REG_RSI]);
+    Writer::writeSafeRegister("RBP", context->uc_mcontext.gregs[REG_RBP]);
+    Writer::writeSafeRegister("RBX", context->uc_mcontext.gregs[REG_RBX]);
+    Writer::writeSafeRegister("RDX", context->uc_mcontext.gregs[REG_RDX]);
+    Writer::writeSafeRegister("RAX", context->uc_mcontext.gregs[REG_RAX]);
+    Writer::writeSafeRegister("RCX", context->uc_mcontext.gregs[REG_RCX]);
+    Writer::writeSafeRegister("RSP", context->uc_mcontext.gregs[REG_RSP]);
+    Writer::writeSafeRegister("RIP", context->uc_mcontext.gregs[REG_RIP]);
+    Writer::writeSafeRegister("EFL", context->uc_mcontext.gregs[REG_EFL]);
+    Writer::writeSafeRegister("CSGSFS", context->uc_mcontext.gregs[REG_CSGSFS]);
+    Writer::writeSafeRegister("ERR", context->uc_mcontext.gregs[REG_ERR]);
+    Writer::writeSafeRegister("TRAPNO", context->uc_mcontext.gregs[REG_TRAPNO]);
+    Writer::writeSafeRegister("OLDMASK", context->uc_mcontext.gregs[REG_OLDMASK]);
+    Writer::writeSafeRegister("CR2", context->uc_mcontext.gregs[REG_CR2]);
 }
 
 void Handler::dumpMemory(void* address) {
+    int pipefd[2];
+    uint8_t buffer;
+    const auto p = pipe(pipefd);
+    if (p == -1) {
+        Writer::writeSafe("Can't pipe\n");
+        _exit(EXIT_FAILURE);
+    }
     if (address == nullptr) {
-        std::cout << "Address is nullptr" << std::endl;
-        return;
+        Writer::writeSafe("address is nullptr\n");
+        _exit(EXIT_FAILURE);
     }
-    long long from = std::max(0ll, (long long) (static_cast<char*>(address) - sizeof(char) * MEMORY_SIZE));
-    long long to = std::min(LONG_LONG_MAX, (long long) (static_cast<char*>(address) + sizeof(char) * MEMORY_SIZE));
 
-    for (long long curAddr = from; curAddr < to; ++curAddr) {
-        sigset_t signalSet;
-        sigemptyset(&signalSet);
-        sigaddset(&signalSet, SIGSEGV);
-        sigprocmask(SIG_UNBLOCK, &signalSet, nullptr);
-
-        struct sigaction act{};
-
-        act.sa_sigaction = sigsegvHandlerAddress;
-        act.sa_flags = SA_SIGINFO;
-
-        if (sigaction(SIGSEGV, &act, nullptr) != 0) {
-            std::cerr << "Sigaction failed: " << strerror(errno) << std::endl;
-            exit(EXIT_FAILURE);
+    for (int i = -MEMORY_SIZE; i < MEMORY_SIZE; ++i) {
+        uint8_t n;
+        char* t = ((char*)address) + i;
+        if (t == address) {
+            Writer::writeSafe("--> ");
         }
-        const char* p = (const char*) curAddr;
-        std::cout << "ADDRESS_0x" << (void*) curAddr << " ";
-        if (setjmp(mJbuf) != 0) {
-            std::cout << "bad :(";
+
+        if (write(pipefd[1], t, 1) < 0 || read(pipefd[0], &buffer, 1) < 0) {
+            Writer::writeSafe("????");
         } else {
-            std::cout << int (p[0]);
+            Writer::writeSafe(n);
         }
-        std::cout << std::endl;
-    }
-}
+        Writer::writeSafe("\n");
 
-void Handler::sigsegvHandlerAddress(int signum, siginfo_t* siginfo, void* context) {
-    if (siginfo->si_signo == SIGSEGV) {
-        siglongjmp(mJbuf, 1);
+
     }
+
 }
