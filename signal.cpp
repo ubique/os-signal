@@ -16,7 +16,7 @@ jmp_buf jmp;
 void check_error(int value, const char *message) {
     if (value == -1) {
         perror(message);
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 }
 
@@ -26,13 +26,13 @@ void write_string(const char *s) {
 
     int tmp = write(STDERR_FILENO, current_pos, strlen(current_pos));
     if (tmp == -1) {
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
     while (tmp != strlen(current_pos)) {
         current_pos += tmp;
         tmp = write(STDERR_FILENO, current_pos, strlen(current_pos));
         if (tmp == -1) {
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
     }
 }
@@ -147,7 +147,7 @@ void sigact_handler(int, siginfo_t *info, void *context) {
     int pip[2];
     if (pipe(pip) == -1) {
         write_string("Unsuccessful create pipe");
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 
     int count_endl = 0;
@@ -166,7 +166,7 @@ void sigact_handler(int, siginfo_t *info, void *context) {
         }
     }
 
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 
@@ -181,4 +181,4 @@ int main() {
     char* x = const_cast<char*>(s);
     *x = 'a';
     return 0;
-} 
+}  
