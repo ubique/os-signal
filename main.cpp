@@ -11,8 +11,8 @@ void fall() {
 void fall2() {
     char* str = const_cast<char*>("Hello, my friend");
     str[16] = '1';
-
 }
+
 int main() {
     struct sigaction action{};
     action.sa_sigaction = Handler::handleSignal;

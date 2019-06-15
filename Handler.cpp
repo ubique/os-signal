@@ -38,7 +38,6 @@ namespace Writer {
 };
 
 
-
 void Handler::handleSignal(int signum, siginfo_t* info, void* context) {
     if (info->si_signo == SIGSEGV) {
         Writer::writeSafe("Aborted: ");
@@ -96,7 +95,6 @@ void Handler::dumpRegisters(ucontext_t* context) {
 
 void Handler::dumpMemory(void* address) {
     int pipefd[2];
-    uint8_t buffer;
     const auto p = pipe(pipefd);
     if (p == -1) {
         Writer::writeSafe("Can't pipe\n");
@@ -108,18 +106,17 @@ void Handler::dumpMemory(void* address) {
     }
 
     for (int i = -MEMORY_SIZE; i < MEMORY_SIZE; ++i) {
+        uint8_t buffer;
         char* t = ((char*)address) + i;
         if (t == address) {
             Writer::writeSafe("--> ");
         }
-
         if (write(pipefd[1], t, 1) < 0 || read(pipefd[0], &buffer, 1) < 0) {
             Writer::writeSafe("????");
         } else {
             Writer::writeSafe(buffer);
         }
         Writer::writeSafe("\n");
-
     }
 
 }
