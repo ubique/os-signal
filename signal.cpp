@@ -37,7 +37,7 @@ void writeError(const char* message) {
     write(2, message, strlen(message));
 }
 
-void dumpMemory(void* address) {
+void dumpMemory(char* address) {
     writeSafe("\nMemory dump:\n");
     int p[2];
     if (pipe(p) == -1) {
@@ -84,12 +84,10 @@ void sigsegvHandler(int signo, siginfo_t* siginfo, void* context) {
                 break;
             }
             default:
-                writeSafe("\nUnsupported code:");
-                writeSafe(siginfo->si_code);
-                writeSafe("\n");
+                writeSafe("\nUnsupported code\n");
         }
         dumpRegisters(reinterpret_cast<ucontext_t*> (context));
-        dumpMemory(siginfo->si_addr);
+        dumpMemory((char*)siginfo->si_addr);
     }
     _exit(EXIT_FAILURE);
 }
