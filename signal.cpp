@@ -14,16 +14,17 @@ const char* registers[23] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15
     "RDI", "RSI", "RBP", "RBX", "RDX", "RAX", "RCX", "RSP", "RIP", "EFL", "CSGSFS",
     "ERR", "TRAPNO", "OLDMASK", "CR2"};
 
-void writeByte(uint8_t byte) {
-    uint8_t first = byte >> (unsigned) 4;
-    uint8_t second = byte & (unsigned) 0xF;
-    char firstChar = first + (first < 10 ? '0' : 'A' - 10);
-    char secondChar = second + (second < 10 ? '0' : 'A' - 10);
-    write(1, &firstChar, 1);
-    write(1, &secondChar, 1);
+void writeNumHex(const uint8_t num) {
+    char c = num + (num < 10 ? '0' : 'A' - 10);
+    write(1, &c, 1);
 }
 
-void writeSafe(uint64_t val) {
+void writeByteHex(const uint8_t byte) {
+    writeNumHex(byte >> (unsigned) 4);
+    writeNumHex(byte & (unsigned) 0xF);
+}
+
+void writeSafe(const uint64_t val) {
     for (int i = 7; i >= 0; --i) {
         writeByte(0xFF & (val >> (8 * i)));
     }
@@ -47,6 +48,7 @@ void dumpMemory(char* address) {
     }
     for (long long i = -MEMORY_DUMP_RANGE; i <= MEMORY_DUMP_RANGE; i++) {
         char* addr = address + i;
+        writeSafe("0x");
         writeSafe((uint64_t) addr);
         writeSafe(": ");
         uint8_t val;
@@ -55,6 +57,7 @@ void dumpMemory(char* address) {
         } else {
             writeByte(val);
         }
+        writeSafe("\n");
     }
 }
 
