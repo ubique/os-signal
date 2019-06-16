@@ -8,12 +8,39 @@
 #include <climits>
 #include <csetjmp>
 #include <cstring>
+#include <unistd.h>
 
-static const long long RANGE = 50;
+static const long long RANGE = 15;
 
 static const size_t CHAR_SIZE = sizeof(char);
 
 static jmp_buf jmpBuf;
+
+namespace safe {
+    void out(const char *str) {
+        write(STDOUT_FILENO, str, strlen(str));
+    }
+
+    void endl() {
+        write(STDOUT_FILENO, "\n", strlen("\n"));
+    }
+
+    void part(uint8_t val) {
+        const char c = val + (val < 10 ? '0' : 'A' - 10);
+        write(1, &c, 1);
+    }
+
+    void out(uint8_t byte) {
+        part(byte / 16);
+        part(byte % 16);
+    }
+
+    void hex(uint64_t value) {
+        for (int i = 7; i >= 0; i--) {
+            out(0xFF & (value >> (8 * i)));
+        }
+    }
+}
 
 
 // general registers from <ucontext.h>
@@ -44,7 +71,7 @@ static const std::vector<std::pair<std::string, greg_t>> REGISTERS = {
         {"CR2",     REG_CR2}
 };
 
-std::string getCodeInfo(int code) {
+const char* getCodeInfo(int code) {
     switch (code) {
         case SEGV_MAPERR:
             return "Address is not mapped to an object";
@@ -60,14 +87,18 @@ std::string getCodeInfo(int code) {
 }
 
 void dumpRegisters(ucontext_t *ucontext) {
-    std::cout << "____________________________________\n" << std::endl;
-    std::cout << "General registers:\n";
+    safe::out("____________________________________\n\n");
+    safe::out("General registers:\n");
     greg_t *gregs = ucontext->uc_mcontext.gregs;
 
     for (auto &r : REGISTERS) {
-        std::cout << "\t\t" << r.first << " : " << gregs[r.second] << std::endl;
+        safe::out("\t\t");
+        safe::out(r.first.c_str());
+        safe::out(r.first.length() <= 3 ? "\t\t:\t" : "\t:\t");
+        safe::hex(gregs[r.second]);
+        safe::endl();
     }
-    std::cout << "____________________________________\n" << std::endl;
+    safe::out("____________________________________\n\n");
 }
 
 
@@ -93,14 +124,16 @@ void dumpByAddress(long long addr) {
     }
 
     if (setjmp(jmpBuf)) {
-        std::cout << "\t\tCannot dump" << std::endl;
+        safe::out("\t\tCannot dump\n");
     } else {
-        std::cout << "\t\t0x" << std::hex << +*reinterpret_cast<char*>(addr) << "\n";
+        safe::out("\t\t0x");
+        safe::hex(+*reinterpret_cast<char*>(addr));
+        safe::endl();
     }
 }
 
 void dumpMemory(char *addr) {
-    std::cout << "Memory: " << std::endl;
+    safe::out("Memory: \n");
 
     const long long left = std::max(0LL, reinterpret_cast<long long> (addr - RANGE * CHAR_SIZE));
     const long long right = std::min(LONG_LONG_MAX, reinterpret_cast<long long> (addr + RANGE * CHAR_SIZE));
@@ -108,16 +141,20 @@ void dumpMemory(char *addr) {
     for (auto address = left; address < right; address += CHAR_SIZE) {
         dumpByAddress(address);
     }
-    std::cout << "____________________________________\n" << std::endl;
+    safe::out("____________________________________\n\n");
 }
 
 
 void handler(int sig, siginfo_t *info, void *uncontext) {
     if (sig == SIGSEGV) {
-        std::cout << "Segmentation fault :)" << std::endl;
-        std::cout << "\n____________________________________\n" << std::endl;
-        std::cout << "Memory address: " << (info->si_addr == nullptr ? "NULL" : info->si_addr) << std::endl;
-        std::cout << "Cause: " << getCodeInfo(info->si_code) << std::endl;
+        safe::out("Segmentation fault :)");
+        safe::out("\n____________________________________\n\n");
+        safe::out("Memory address: ");
+        safe::out((info->si_addr == nullptr ? "NULL" : static_cast<const char *>(info->si_addr)));
+        safe::endl();
+        safe::out("Cause: ");
+        safe::out(getCodeInfo(info->si_code));
+        safe::endl();
 
         dumpRegisters(static_cast<ucontext_t *> (uncontext));
 
@@ -126,7 +163,7 @@ void handler(int sig, siginfo_t *info, void *uncontext) {
         }
     }
 
-    exit(EXIT_FAILURE);
+    _exit(EXIT_FAILURE);
 }
 
 
@@ -138,7 +175,7 @@ int main() {
 
     if (sigaction(SIGSEGV, &sigact, nullptr) == -1) {
         perror("Sigaction failed");
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 
     char* test = const_cast<char*>("Hell");
