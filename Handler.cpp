@@ -45,6 +45,7 @@ void Handler::dump_memory(void *address) {
 			print_error("Memory dump failed");
 		}
 		else {
+			write_string("0x");
 			write_number(static_cast<uint64_t>(i));
 			write_string("\n");
 		}
@@ -125,6 +126,7 @@ void Handler::handler(int signo, siginfo_t *siginfo, void *ucontext) {
 		}
 		else {
 			uint64_t address = reinterpret_cast<uint64_t>(siginfo->si_addr);
+			write_string("0x");
 			write_number(address);
 		}
 		write_string("\n\n");
