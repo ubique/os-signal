@@ -14,11 +14,12 @@ std::map <string, int> Handler::regs = {
 };
 
 void Handler::dump_memory(void *address) {
-	cout << "Memory dump:" << endl;
-
 	if (address == nullptr) {
-		print_error("address in nullptr");
+		write_string("address is null");
+		return;
 	}
+	
+	write_string("Memory dump:\n");
 
 	size_t addr = reinterpret_cast<size_t> (address);
 	size_t left;
@@ -41,13 +42,49 @@ void Handler::dump_memory(void *address) {
 		}
 
 		if (setjmp(jmp) == -1) {
-			cerr << "Memory dump failed" << endl;
+			print_error("Memory dump failed");
 		}
 		else {
-			cout << "0x" << hex << (int) *reinterpret_cast<char *>(i) << endl;
+			write_number(static_cast<uint64_t>(i));
+			write_string("\n");
 		}
 	}
-	cout << endl;
+	write_string("\n");
+}
+
+void Handler::write_byte(uint8_t num) {
+	write_char(num / 16);
+	write_char(num % 16);
+}
+
+void Handler::write_char(char c) {
+	char ch;
+	
+	if (c < 10) {
+		ch = c + '0';
+	}
+	else {
+		ch = c - 10 + 'a';
+	}
+
+	write(1, &ch, 1);
+}
+
+void Handler::write_number(uint64_t n) {
+	if (n == 0) {
+		write_string("0");
+		return;
+	}
+	for (int i = 7; i >= 0; i--) {
+		uint8_t byte = (n >> (i * 8)) & 0xFF;
+		if (byte != 0) {
+			write_byte(byte);
+		}
+	}
+}
+
+void Handler::write_string(const char *str) {
+	write(1, str, strlen(str));
 }
 
 void Handler::jump_handler(int signo, siginfo_t *siginfo, void *ucontext) {
@@ -71,23 +108,35 @@ void Handler::find_borders(size_t &left, size_t &right, size_t addr) {
 }
 
 void Handler::dump_registers(ucontext_t *ucontext) {
-	cout << "Registers dump:" << endl;
+	write_string("Registers dump:\n");
 	for (map <string, int>::iterator it = regs.begin(); it != regs.end(); it++) {
-		cout << (*it).first << ": " << "0x" << hex << ucontext->uc_mcontext.gregs[(*it).second] << endl;
+		write_string(it->first.c_str());
+		write_string(": 0x");
+		write_number(ucontext->uc_mcontext.gregs[it->second]);
+		write_string("\n");
 	}
 }
 
 void Handler::handler(int signo, siginfo_t *siginfo, void *ucontext) {
 	if (siginfo->si_signo == SIGSEGV) {
-		cout << "SIGSEGV occurred at address: " << ((siginfo->si_addr == nullptr)? "null" : siginfo->si_addr) << endl << endl;
-		dump_memory(siginfo->si_addr);
+		write_string("SIGSEGV occurred at address: ");
+		if (siginfo->si_addr == nullptr) {
+			write_string("null");
+		}
+		else {
+			uint64_t address = reinterpret_cast<uint64_t>(siginfo->si_addr);
+			write_number(address);
+		}
+		write_string("\n\n");
+		dump_memory(static_cast<char *>(siginfo->si_addr));
 		dump_registers(reinterpret_cast<ucontext_t *> (ucontext));
 	}
 
-	exit(EXIT_FAILURE);
+	_exit(EXIT_FAILURE);
 }
 
 void Handler::print_error(const char *error) {
-	cerr << error << endl;
-	exit(EXIT_FAILURE);
+	write_string(error);
+	write_string("\n");
+	_exit(EXIT_FAILURE);
 }

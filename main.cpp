@@ -3,12 +3,12 @@
 
 using namespace std;
 
-void printError(const char *error) {
-	perror(error);
-	exit(EXIT_FAILURE);
+void print_error(const char *error) {
+	write(1, error, strlen(error));
+	_exit(EXIT_FAILURE);
 }
 
-void generateError() {
+void generate_error() {
 	char *str = const_cast<char *>("Hello, World!");
 	str[15] = ' ';
 }
@@ -19,10 +19,10 @@ int main() {
         sa.sa_sigaction = Handler::handler;
 
         if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
-		printError("sigaction");
+		print_error("sigaction");
 	}
 
-	generateError();
+	generate_error();
 
 	return 0;
 }
