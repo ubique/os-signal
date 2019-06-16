@@ -3,7 +3,7 @@
 #include <cstring>
 #include <cstdio>
 #include <iostream>
-#include <ucontext.h>
+#include <unistd.h>
 #include <cmath>
 #include <climits>
 #include <sys/ucontext.h>
@@ -15,8 +15,8 @@ const char* registers[23] = {"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15
     "ERR", "TRAPNO", "OLDMASK", "CR2"};
 
 void writeByte(uint8_t byte) {
-    byte first = byte >> (unsigned) 4;
-    byte second = byte & (unsigned) 0xF;
+    uint8_t first = byte >> (unsigned) 4;
+    uint8_t second = byte & (unsigned) 0xF;
     char firstChar = first + (first < 10 ? '0' : 'A' - 10);
     char secondChar = second + (second < 10 ? '0' : 'A' - 10);
     write(1, &firstChar, 1);
@@ -38,7 +38,7 @@ void writeError(const char* message) {
 }
 
 void dumpMemory(void* address) {
-    writeSafe("\nMemory dump:\n";)
+    writeSafe("\nMemory dump:\n");
     int p[2];
     if (pipe(p) == -1) {
         writeError("Error while creating pipe");
@@ -64,7 +64,7 @@ void dumpRegisters(ucontext_t* ucontext) {
     for (greg_t curReg = REG_R8; curReg != NGREG; curReg++) {
         writeSafe(registers[curReg]);
         writeSafe(": 0x");
-        writeSafe(context->uc_mcontext.gregs[curReg]);
+        writeSafe(gregs[curReg]);
         writeSafe("\n");
     }
 }
