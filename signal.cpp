@@ -46,7 +46,7 @@ void dumpMemory(void* address) {
         _exit(EXIT_FAILURE);
     }
     for (long long i = -MEMORY_DUMP_RANGE; i <= MEMORY_DUMP_RANGE; i++) {
-        void* addr = address + i;
+        char* addr = address + i;
         writeSafe((uint64_t) addr);
         writeSafe(": ");
         uint8_t val;
@@ -59,7 +59,7 @@ void dumpMemory(void* address) {
 }
 
 void dumpRegisters(ucontext_t* ucontext) {
-    safeWrite("\nGeneral purposes registers:\n");
+    writeSafe("\nGeneral purposes registers:\n");
     greg_t* gregs = ucontext->uc_mcontext.gregs;
     for (greg_t curReg = REG_R8; curReg != NGREG; curReg++) {
         writeSafe(registers[curReg]);
