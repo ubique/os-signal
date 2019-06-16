@@ -27,7 +27,7 @@ namespace safe {
 
     void part(uint8_t val) {
         const char c = val + (val < 10 ? '0' : 'A' - 10);
-        write(1, &c, 1);
+        write(STDOUT_FILENO, &c, 1);
     }
 
     void out(uint8_t byte) {
