@@ -7,6 +7,9 @@
 #include <setjmp.h>
 #include <sys/mman.h>
 #include <signal.h>
+#include <unistd.h>
+
+static const int COUT_FD = 1, ERR_FD = 2;
 
 //just for __x86_64__
 static const std::string register_name[] = { "REG_R8", "REG_R9", "REG_R10", "REG_R11", "REG_R12",
@@ -16,26 +19,53 @@ static const std::string register_name[] = { "REG_R8", "REG_R9", "REG_R10", "REG
     "REG_TRAPNO", "REG_OLDMASK", "REG_CR2" };
 static jmp_buf jmp_buffer;
 
-void mem_handler(int signum)
-{
+void mem_handler(int signum) {
     siglongjmp(jmp_buffer, 1);
-
 }
 
-void register_dump(ucontext_t* context)
-{
-    std::cout << "\tGeneral purpose registers dump:\n";
+void write(const char *str) {
+    write(COUT_FD, str, strlen(str));
+}
+
+char get_hex_char(uint8_t number) {
+    return static_cast<char>(number + (number < 10 ? '0' : 'A' - 10));
+}
+
+void write_hex(size_t number) {
+    char *buffer = new char[sizeof(size_t) * 2 + 3];
+    unsigned short k = 0;
+    buffer[k++] = '0';
+    buffer[k++] = 'x';
+
+    for (int i = sizeof (size_t) - 1; i >= 0; --i) {
+        uint8_t bt = 0xFF & (number >> (i * 8));
+        buffer[k++] = get_hex_char(bt / 16);
+        buffer[k++] = get_hex_char(bt % 16);
+    }
+    buffer[k] = '\0';
+    write(buffer);
+    delete[] buffer;
+}
+
+void write_err(const char *str) {
+    write(ERR_FD, str, strlen(str));
+}
+
+void register_dump(ucontext_t* context) {
+    write("\tGeneral purpose registers:\n");
+
     for (size_t i = 0; i < NGREG; ++i) {
-        std::cout << std::setw(11) << std::setiosflags(std::ios::left) << register_name[i] << ": 0x" << std::hex << static_cast<long long>(context->uc_mcontext.gregs[i]) << "\n";
+        write(register_name[i].c_str());
+        write(": ");
+        write_hex( static_cast<size_t>(context->uc_mcontext.gregs[i]));
+        write("\n");
     }
 }
 
-void memory_dump(void* addr)
-{
-    std::cout << "\tMemory dump:\n";
-
+void memory_dump(void* addr) {
+    write("\tMemory dump:\n");
     if (addr == nullptr) {
-        std::cout << "The address where SIGSEGV was generated is NULL\n";
+        write("The address where SIGSEGV was generated is NULL\n");
         return;
     }
 
@@ -47,10 +77,11 @@ void memory_dump(void* addr)
     to = to - eps < address ? to : address + eps;
 
     for (size_t i = from; i < to; i += sizeof(char)) {
-
         sigset_t sig_set;
         if (sigemptyset(&sig_set) == -1 || sigaddset(&sig_set, SIGSEGV) == -1 || sigprocmask(SIG_UNBLOCK, &sig_set, nullptr) == -1) {
-            std::cerr << "sigemptyset or sigaddset or sigprocmask failed: " << strerror(errno) << "\n";
+            write_err("sigemptyset or sigaddset or sigprocmask failed: ");
+            write_err(strerror(errno));
+            write_err("\n");
             return;
         };
 
@@ -60,33 +91,50 @@ void memory_dump(void* addr)
         sigact.sa_mask = sig_set;
 
         if (sigaction(SIGSEGV, &sigact, nullptr) == -1) {
-            std::cerr << "sigaction in memoty_dump failed: " << strerror(errno) << "\n";
+            write("sigaction in memoty_dump failed: ");
+            write_err(strerror(errno));
+            write_err("\n");
+            return;
+        }
+        if (sigaction(SIGSEGV, &sigact, nullptr) == -1) {
+            write_err("sigaction in memoty_dump failed: ");
+            write_err(strerror(errno));
+            write_err("\n");
             return;
         }
 
-        std::cout << std::hex << "addr 0x" << i;
+        write("addr ");
+        write_hex(i);
+
         if (i == address) {
-            std::cout << " is the address created SIGSEGV\n";
+            write( " is the address created SIGSEGV\n");
             continue;
         }
 
         char* ptr = reinterpret_cast<char*>(i);
 
         if (setjmp(jmp_buffer) == 0) {
-            std::cout << "\t" << std::hex << static_cast<int>(*ptr) << "\n";
+            write("\t");
+            write_hex(*ptr);
+            write("\n");
+        } else {
+            write("can't read\n");
         }
-        else {
-            std::cout << "can't read\n";
-        }
-    }
+     }
 }
 
-void handler(int sigint, siginfo_t* sig_info, void* context)
-{
-    std::cout << strsignal(sigint) << " at 0x" << std::hex << reinterpret_cast<size_t>(sig_info->si_addr) << "\n";
-    register_dump(reinterpret_cast<ucontext_t*>(context));
-    memory_dump(sig_info->si_addr);
-    exit(EXIT_FAILURE);
+void handler(int sigint, siginfo_t* sig_info, void* context) {
+    write("SIGSEGV at ");
+    if (sig_info->si_addr == nullptr) {
+        write("NULL");
+    } else {
+        write_hex(reinterpret_cast<size_t>(sig_info->si_addr));
+    }
+    write("\n");
+
+   register_dump(reinterpret_cast<ucontext_t*>(context));
+   memory_dump(sig_info->si_addr);
+    _exit(EXIT_FAILURE);
 }
 
 void test1_nullptr()
@@ -112,7 +160,7 @@ void test3_private()
     void* ptr = mmap(nullptr, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (ptr == MAP_FAILED) {
-        std::cout << "mmap failed: " << strerror(errno) << "\n";
+        std::cout << "test3: mmap failed: " << strerror(errno) << "\n";
         return;
     }
 
@@ -125,13 +173,14 @@ void test3_private()
     *(hi + 5) = '\0';
 
     if (mprotect(ptr, len, PROT_READ) == -1) {
-        std::cerr << "mprotect failed: " << strerror(errno) << "\n";
+        std::cerr << "test3: mprotect failed: " << strerror(errno) << "\n";
         return;
     }
     std::cout << hi << "\n";
 
     *(hi + 6) = 'h';
 }
+
 
 int main()
 {
@@ -141,13 +190,22 @@ int main()
     sig_act.sa_flags = SA_SIGINFO;
     sig_act.sa_sigaction = handler;
 
+    sigset_t sig_set;
+    if (sigemptyset(&sig_set) == -1 || sigaddset(&sig_set, SIGSEGV) == -1) {
+        std::cerr << "main: sigemptyset or sigaddset failed: " << strerror(errno) << "\n";
+        exit(EXIT_FAILURE);
+    };
+
+    sig_act.sa_mask = sig_set;
+
     if (sigaction(SIGSEGV, &sig_act, nullptr) == -1) {
-        std::cerr << "sigaction() failed: " << strerror(errno);
+        std::cerr << "main: sigaction() failed: " << strerror(errno);
         exit(EXIT_FAILURE);
     }
 
     //test1_nullptr();
     //test2_outofbound();
     test3_private();
+
     return 0;
 }
